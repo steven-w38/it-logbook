@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Calendar - <%= student.name %></title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex">
+
+  <!-- Sidebar -->
+  <div class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+      <span class="text-2xl font-bold">👤</span>
+    </div>
+    <h2 class="text-xl font-bold"><%= user.Name %></h2>
+    <p class="text-sm"><%= user.Email_Address %></p>
+    <nav class="mt-6 space-y-4 text-left w-full">
+      <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+      <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
+      <a href="#" class="block hover:text-blue-300">🔔 Notification</a>
+      <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+      <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+    </nav>
+  </div>
+
+  <!-- Main content -->
+  <div class="flex-1 p-8 overflow-y-auto">
+    <h1 class="text-2xl font-bold mb-6 text-blue-900">Calendar for <%= student.name %></h1>
+
+    <div class="flex justify-between items-center mb-6">
+      <a href="?month=<%= month === 1 ? 12 : month - 1 %>&year=<%= month === 1 ? year - 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">&lt; Prev</a>
+      <h2 class="text-xl font-bold"><%= monthName %> <%= year %></h2>
+      <a href="?month=<%= month === 12 ? 1 : month + 1 %>&year=<%= month === 12 ? year + 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">Next &gt;</a>
+    </div>
+
+    <div class="grid grid-cols-7 gap-2 mb-4 font-semibold text-gray-600">
+      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    </div>
+
+    <div class="grid grid-cols-7 gap-2">
+    <% calendarDays.forEach(day => { %>
+    <% if (!day) { %>
+      <div></div>
+    <% } else {
+        const dayDate = new Date(year, month - 1, day)
+        const timezoneOffset = dayDate.getTimezoneOffset() * 60000; // offset in milliseconds
+        const localISODate = new Date(dayDate - timezoneOffset).toISOString().slice(0, 10);
+
+        const isToday = new Date().toDateString() === new Date(year, month - 1, day).toDateString();
+        const dateString = new Date(year, month - 1, day).toISOString().split("T")[0];
+        const status = logsByDate[localISODate];
+        let dayClass = "bg-red-500";
+        if (logsByDate[localISODate] === "remarked") {
+        dayClass = "bg-green-500"; 
+        } else if (logsByDate[localISODate] === "awaiting") {
+        dayClass = "bg-orange-500"; 
+        }
+        if (new Date(year, month - 1, day) > new Date()) {
+        dayClass = "bg-white"; 
+      }
+      %>
+      <a href="/student/<%= encodeURIComponent(student['mat number']) %>/logs/<%= localISODate %>">
+        <div class="h-20 flex items-center justify-center rounded hover:scale-105 transition <%= dayClass %>">
+            <%= day %>
+        </div>
+      </a>
+    <% } %>
+    <% }) %>
+    </div>
+
+    <div class="mt-6 flex space-x-4 text-sm font-semibold">
+      <div class="flex items-center"><span class="inline-block w-4 h-4 bg-green-500 rounded mr-2"></span>Remarked</div>
+      <div class="flex items-center"><span class="inline-block w-4 h-4 bg-orange-500 rounded mr-2"></span>Awaiting Remark</div>
+      <div class="flex items-center"><span class="inline-block w-4 h-4 bg-red-500 rounded mr-2"></span>No Entry</div>
+    </div>
+  </div>
+
+</body>
+</html>

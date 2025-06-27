@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Student Info</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex">
+
+<aside class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+  <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+    <span class="text-2xl font-bold">👤</span>
+  </div>
+  <h2 class="text-xl font-bold"><%= user.Name %></h2>
+  <p class="text-sm mb-6"><%= user.Email_Address %></p>
+  <nav class="space-y-4 w-full text-left">
+    <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+    <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
+    <a href="#" class="block hover:text-blue-300">🔔 Notification</a>
+    <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+    <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+  </nav>
+</aside>
+
+<main class="flex-1 p-8 overflow-y-auto max-w-3xl">
+  <h1 class="text-3xl font-extrabold text-blue-900 mb-6">Student Info</h1>
+
+  <div class="bg-white rounded shadow p-6 space-y-6">
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">Mat Number</label>
+      <input type="text" value="<%= student['mat number'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">Name</label>
+      <input type="text" value="<%= student.name %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">School</label>
+      <input type="text" value="<%= student.school %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">Department</label>
+      <input type="text" value="<%= student.department %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">Faculty</label>
+      <input type="text" value="<%= student.faculty %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">IT Location</label>
+      <input type="text" value="<%= student['it location'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+
+    <div>
+      <label class="block text-gray-700 font-medium mb-1">Email</label>
+      <input type="email" value="<%= student.email %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+    </div>
+  </div>
+
+  <div class="mt-6">
+    <a href="/student/<%= encodeURIComponent(student['mat number']) %>"
+       class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2 rounded transition">
+      Back to Student Details
+    </a>
+  </div>
+</main>
+
+</body>
+</html>

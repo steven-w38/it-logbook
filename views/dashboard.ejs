@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Supervisor Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex flex-col md:flex-row">
+
+  <aside class="bg-blue-900 text-white w-full md:w-64 p-6 flex flex-col items-center">
+    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+      <span class="text-2xl font-bold">👤</span>
+    </div>
+    <h2 class="text-xl font-bold"><%= user.Name %></h2>
+    <p class="text-sm mb-6"><%= user.Email_Address %></p>
+    <nav aria-label="Primary" class="space-y-4 w-full text-left">
+      <a href="/dashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">👥 Students</a>
+      <a href="/calendar" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🗓️ Calendar</a>
+      <a href="#" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🔔 Notification</a>
+      <a href="/settings" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">⚙️ Settings</a>
+      <a href="/logout" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🚪 Logout</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 overflow-y-auto">
+    <h1 class="text-2xl font-bold text-blue-900 mb-6">All Students</h1>
+
+    <% if (students.length > 0) { %>
+      <div class="bg-white rounded shadow p-4 overflow-x-auto">
+        <table class="table-auto w-full text-gray-600" role="grid" aria-label="Students List">
+          <thead>
+            <tr class="bg-gray-100 text-gray-800 text-left">
+              <th scope="col" class="p-3">Mat Number</th>
+              <th scope="col" class="p-3">Name</th>
+              <th scope="col" class="p-3">School</th>
+              <th scope="col" class="p-3">Department</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% students.forEach(student => { 
+                 const url = `/student/${encodeURIComponent(student['mat number'])}`;
+            %>
+              <tr 
+                role="row"
+                tabindex="0" 
+                class="border-b border-transparent hover:bg-gray-50 focus:bg-gray-100 focus:border-orange-500 cursor-pointer"
+                data-url="<%= url %>"
+                aria-label="View details for <%= student.name %>, Mat Number <%= student['mat number'] %>"
+              >
+                <td class="p-3" role="gridcell"><%= student["mat number"] %></td>
+                <td class="p-3" role="gridcell"><%= student.name %></td>
+                <td class="p-3" role="gridcell"><%= student.school %></td>
+                <td class="p-3" role="gridcell"><%= student.department %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } else { %>
+      <div class="bg-white rounded p-4 text-gray-600 text-center py-20">No students available.</div>
+    <% } %>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const rows = document.querySelectorAll('tbody tr[data-url]');
+
+      rows.forEach(row => {
+        row.addEventListener('click', () => {
+          const url = row.getAttribute('data-url');
+          if (url) {
+            window.location.href = url;
+          }
+        });
+
+        row.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const url = row.getAttribute('data-url');
+            if (url) {
+              window.location.href = url;
+            }
+          }
+        });
+      });
+    });
+  </script>
+
+</body>
+</html>

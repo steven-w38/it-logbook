@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Student Details</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex flex-col md:flex-row">
+
+  <!-- Sidebar -->
+  <aside class="bg-blue-900 text-white w-full md:w-64 p-6 flex flex-col items-center">
+    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+      <span class="text-2xl font-bold">👤</span>
+    </div>
+    <h2 class="text-xl font-bold"><%= user.Name %></h2>
+    <p class="text-sm mb-6"><%= user.Email_Address %></p>
+    <nav class="space-y-4 w-full text-left">
+      <a href="/dashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">👥 Students</a>
+      <a href="/calendar" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🗓️ Calendar</a>
+      <a href="#" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🔔 Notification</a>
+      <a href="/settings" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">⚙️ Settings</a>
+      <a href="/logout" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🚪 Logout</a>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 p-8 overflow-y-auto">
+    <h1 class="text-2xl font-bold text-blue-900 mb-6">Student Details for <%= student.name %></h1>
+    <!-- Success / Error Messages -->
+    <% if (success) { %>
+    <div class="mb-4 p-3 rounded text-white bg-green-500">
+    <%= success %>
+    </div>
+    <% } %>
+    <% if (error) { %>
+    <div class="mb-4 p-3 rounded text-white bg-red-500">
+    <%= error %>
+    </div>
+    <% } %>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <!-- Student Report Area -->
+      <section class="md:col-span-2 bg-white p-4 rounded shadow h-64 flex flex-col">
+        <div class="flex-grow overflow-y-auto">
+          <% if (latestLog) { %>
+            <div class="border-b p-2">
+              <p><strong>Date:</strong> <%= new Date(latestLog.date).toLocaleDateString() %></p>
+              <p><strong>Log:</strong> <%= latestLog.log %></p>
+            </div>
+          <% } else { %>
+            <p class="text-gray-500">No logs available for this student.</p>
+          <% } %>
+        </div>
+        <a href="/student/<%= encodeURIComponent(student['mat number']) %>/logs" 
+          class="self-end mt-4 bg-orange-500 text-white px-6 py-2 rounded hover:bg-orange-600 transition">
+          View All Logs
+        </a>
+      </section>
+
+      <!-- Student Info Area -->
+      <section class="bg-white p-4 rounded shadow h-64 flex flex-col items-center justify-center">
+        <h3 class="text-lg font-semibold mb-4">Student Info</h3>
+        <a href="/student/<%= encodeURIComponent(student['mat number']) %>/info" 
+          class="bg-orange-500 text-white px-6 py-2 rounded hover:bg-orange-600 transition">
+          Check Now
+        </a>
+      </section>
+    </div>
+
+    <!-- Supervisor Remark Area -->
+    <% if (latestLog) { %>
+      <section class="bg-white p-4 rounded shadow h-48 flex flex-col">
+        <form action="/student/<%= encodeURIComponent(student['mat number']) %>/save-remark" method="POST" class="flex flex-col h-full">
+          <label for="supervisor-remark" class="mb-2 font-semibold text-gray-700">Supervisor Remark</label>
+          <textarea id="supervisor-remark" name="remark" rows="6" placeholder="Enter remarks here..." 
+            class="resize-none p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500 flex-grow"><%= latestLog.remark || "" %></textarea>
+          <button type="submit" class="mt-3 self-end bg-orange-500 text-white px-6 py-2 rounded hover:bg-orange-600 transition">
+            Save Remark
+          </button>
+        </form>
+      </section>
+    <% } else { %>
+      <section class="bg-white p-4 rounded shadow h-48 flex flex-col justify-center items-center">
+        <p class="text-gray-500">No recent log available for remarks.</p>
+      </section>
+    <% } %>
+  </main>
+
+</body>
+</html>

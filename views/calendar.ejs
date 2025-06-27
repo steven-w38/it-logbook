@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Calendar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex">
+    
+    <div class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+      <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+        <span class="text-2xl font-bold">👤</span>
+      </div>
+      <h2 class="text-xl font-bold"><%= user.Name %></h2>
+      <p class="text-sm"><%= user.Email_Address %></p>
+      <nav class="mt-6 space-y-4 text-left w-full">
+        <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+        <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
+        <a href="#" class="block hover:text-blue-300">🔔 Notification</a>
+        <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+        <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+      </nav>
+    </div>
+
+    <div class="flex-1 p-8 overflow-y-auto">
+      <h1 class="text-2xl font-bold mb-6 text-blue-900">Calendar</h1>
+
+      <div class="flex justify-between items-center mb-6">
+        <a href="/calendar?month=<%= month - 1 %>&year=<%= year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">&lt; Prev</a>
+        <h2 class="text-xl font-bold"><%= monthName %> <%= year %></h2>
+        <a href="/calendar?month=<%= month + 1 %>&year=<%= year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">Next &gt;</a>
+      </div>
+
+      <div class="grid grid-cols-7 gap-2 mb-4 font-semibold text-gray-600">
+        <div>Sun</div>
+        <div>Mon</div>
+        <div>Tue</div>
+        <div>Wed</div>
+        <div>Thu</div>
+        <div>Fri</div>
+        <div>Sat</div>
+      </div>
+
+      <div class="grid grid-cols-7 gap-2">
+        <% calendarDays.forEach(day => { %>
+          <% if (!day) { %>
+            <div></div>
+          <% } else { 
+              const today = new Date();
+              const isToday = (today.getDate() === day) && (today.getMonth() + 1 === month) && (today.getFullYear() === year);
+          %>
+            <div class="h-20 flex items-center justify-center rounded 
+              <%= isToday ? 'bg-blue-900 text-white font-bold' : 'bg-white text-gray-800' %>">
+              <%= day %>
+            </div>
+          <% } %>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en" >
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .tab-active {
+      @apply border-b-4 border-orange-500 text-orange-600 font-semibold;
+    }
+  </style>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex">
+
+  <aside class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+      <span class="text-2xl font-bold">👤</span>
+    </div>
+    <h2 class="text-xl font-bold"><%= user.Name %></h2>
+    <p class="text-sm mb-6"><%= user.Email_Address %></p>
+    <nav class="space-y-4 w-full text-left">
+      <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+      <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
+      <a href="#" class="block hover:text-blue-300">🔔 Notification</a>
+      <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+      <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 overflow-auto max-w-4xl">
+    <h1 class="text-3xl font-extrabold mb-6 text-blue-900">Settings</h1>
+
+    <div class="border-b border-gray-300 mb-6 flex space-x-8 text-gray-600">
+      <button id="tab-profile" class="tab-btn tab-active pb-2" type="button">Profile</button>
+      <button id="tab-password" class="tab-btn pb-2" type="button">Change Password</button>
+    </div>
+
+    <section id="content-profile" class="tab-content block">
+      <div class="space-y-6">
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">Name</label>
+          <input type="text" value="<%= user.Name %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">School</label>
+          <input type="text" value="<%= user.School %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">Department</label>
+          <input type="text" value="<%= user.Department %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+        
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">Faculty</label>
+          <input type="text" value="<%= user.Faculty %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">Phone Number</label>
+          <input type="tel" value="<%= user.Phone_Number %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+
+        <div>
+          <label class="block text-gray-700 font-medium mb-1">Email Address</label>
+          <input type="email" value="<%= user.Email_Address %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+        </div>
+
+      </div>
+    </section>
+
+    <section id="content-password" class="tab-content hidden space-y-6">
+      <div id="message" class="hidden mb-4 px-4 py-3 rounded text-white"></div>
+
+      <form id="changePasswordForm" action="/change-password" method="POST" novalidate class="space-y-6">
+        <input type="hidden" name="email" value="<%= user.Email_Address %>">
+
+        <div class="relative">
+          <label for="currentPassword" class="block text-gray-700 font-medium mb-1">Current Password</label>
+          <input type="password" id="currentPassword" name="currentPassword" required
+            class="w-full border border-gray-300 rounded px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          <button type="button" tabindex="-1" aria-label="Toggle current password visibility"
+            class="absolute right-3 top-9 text-gray-400 hover:text-gray-700 focus:outline-none" onclick="togglePassword('currentPassword', this)">
+            🙈
+          </button>
+        </div>
+
+        <div class="relative">
+          <label for="newPassword" class="block text-gray-700 font-medium mb-1">New Password</label>
+          <input type="password" id="newPassword" name="newPassword" required minlength="8"
+            class="w-full border border-gray-300 rounded px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          <button type="button" tabindex="-1" aria-label="Toggle new password visibility"
+            class="absolute right-3 top-9 text-gray-400 hover:text-gray-700 focus:outline-none" onclick="togglePassword('newPassword', this)">
+            🙈
+          </button>
+        </div>
+
+        <div class="relative">
+          <label for="confirmPassword" class="block text-gray-700 font-medium mb-1">Confirm New Password</label>
+          <input type="password" id="confirmPassword" name="confirmPassword" required minlength="8"
+            class="w-full border border-gray-300 rounded px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+          <button type="button" tabindex="-1" aria-label="Toggle confirm password visibility"
+            class="absolute right-3 top-9 text-gray-400 hover:text-gray-700 focus:outline-none" onclick="togglePassword('confirmPassword', this)">
+            🙈
+          </button>
+        </div>
+
+        <button type="submit" class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2 rounded transition">
+          Change Password
+        </button>
+      </form>
+    </section>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab-btn');
+    const contents = document.querySelectorAll('.tab-content');
+
+    tabs.forEach((tab, idx) => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('tab-active', 'text-orange-600'));
+        tabs.forEach(t => t.classList.add('text-gray-600'));
+        contents.forEach(c => c.classList.add('hidden'));
+        contents.forEach(c => c.classList.remove('block'));
+
+        tab.classList.add('tab-active', 'text-orange-600');
+        tab.classList.remove('text-gray-600');
+        contents[idx].classList.remove('hidden');
+        contents[idx].classList.add('block');
+      });
+    });
+
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (input.type === "password") {
+        input.type = "text";
+        btn.textContent = "👁️";
+      } else {
+        input.type = "password";
+        btn.textContent = "🙈";
+      }
+    }
+
+    const messageDiv = document.getElementById('message');
+    const form = document.getElementById('changePasswordForm');
+
+    form.addEventListener('submit', function(e) {
+      messageDiv.classList.add('hidden');
+
+      const currentPassword = form.currentPassword.value.trim();
+      const newPassword = form.newPassword.value.trim();
+      const confirmPassword = form.confirmPassword.value.trim();
+
+      if (!currentPassword || !newPassword || !confirmPassword) {
+        e.preventDefault();
+        showMessage('Please fill in all password fields.', 'red');
+        return;
+      }
+
+      if (newPassword.length < 8) {
+        e.preventDefault();
+        showMessage('New password must be at least 8 characters.', 'red');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        e.preventDefault();
+        showMessage('New password and confirmation do not match.', 'red');
+        return;
+      }
+    });
+
+    function showMessage(msg, type) {
+      messageDiv.textContent = msg;
+      messageDiv.classList.remove('hidden');
+      if (type === 'red') {
+        messageDiv.classList.remove('bg-green-500');
+        messageDiv.classList.add('bg-red-600');
+      } else if (type === 'green') {
+        messageDiv.classList.remove('bg-red-600');
+        messageDiv.classList.add('bg-green-500');
+      }
+    }
+
+    <% if (typeof success !== 'undefined' && success) { %>
+      showMessage("<%= success %>", "green");
+    <% } else if (typeof error !== 'undefined' && error) { %>
+      showMessage("<%= error %>", "red");
+    <% } %>
+  </script>
+
+</body>
+</html>
