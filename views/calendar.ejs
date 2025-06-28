@@ -2,13 +2,25 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Calendar</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-blue-50 font-sans min-h-screen flex">
-    
-    <div class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+<body class="bg-blue-50 font-sans min-h-screen">
+
+  <button id="sidebarToggleBtn"
+    class="fixed top-4 left-4 z-50 p-2 rounded bg-blue-900 text-white focus:outline-none md:hidden"
+    aria-label="Toggle Sidebar">
+    <span class="block w-6 h-0.5 bg-white mb-1"></span>
+    <span class="block w-6 h-0.5 bg-white mb-1"></span>
+    <span class="block w-6 h-0.5 bg-white"></span>
+  </button>
+
+  <div class="flex">
+
+    <aside id="sidebar"
+      class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0
+             transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
       <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
         <span class="text-2xl font-bold">👤</span>
       </div>
@@ -21,9 +33,9 @@
         <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
         <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
       </nav>
-    </div>
+    </aside>
 
-    <div class="flex-1 p-8 overflow-y-auto">
+    <main class="flex-1 p-8 overflow-y-auto ml-0 md:ml-64 transition-all duration-300">
       <h1 class="text-2xl font-bold mb-6 text-blue-900">Calendar</h1>
 
       <div class="flex justify-between items-center mb-6">
@@ -57,7 +69,28 @@
           <% } %>
         <% }) %>
       </div>
-    </div>
+    </main>
   </div>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+
+    toggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('-translate-x-full');
+    });
+
+    document.addEventListener('click', (e) => {
+      if (
+        !sidebar.contains(e.target) &&
+        !toggleBtn.contains(e.target) &&
+        !sidebar.classList.contains('-translate-x-full') &&
+        window.innerWidth < 768
+      ) {
+        sidebar.classList.add('-translate-x-full');
+      }
+    });
+  </script>
+
 </body>
 </html>
