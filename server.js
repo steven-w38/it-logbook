@@ -9,8 +9,6 @@ const nodemailer = require('nodemailer');
 const validator = require('validator');
 const disposable = require('disposable-email-domains');
 const { parsePhoneNumber } = require('libphonenumber-js');
-const { error } = require('console');
-const { ifError } = require('assert');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -32,9 +30,9 @@ function handleError(res, view, error, status = 500) {
 
 function authenticateToken(req, res, next) {
   const token = req.cookies?.token;
-  if (!token) return res.status(400).send('Autentication needed.');
+  if (!token) return res.redirect('/login');
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.status(500).send('Invalid or expired token.');
+    if (err) return res.redirect('/login');
     req.tokenData = user;
     next();
   });
@@ -210,12 +208,29 @@ app.post('/login', async (req, res) => {
 });
 
 app.get("/dashboard", authenticateToken, fetchUserJWT, async (req, res) => {
-  const { data: studentsData, error: studentsError } = await supabase.from("students").select("*");
+  const search = (req.query.search || "").trim().toLowerCase();
+  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*");
   if (studentsError) return handleError(res, 'dashboard', 'Error fetching students.');
+
+  if (search) {
+    studentsData = studentsData.filter(s => {
+      const name = (s.name || "").toLowerCase();
+      const matNum = (s["mat number"] || "").toLowerCase();
+      const school = (s.school || "").toLowerCase();
+      const dept = (s.department || "").toLowerCase();
+      return (
+        name.includes(search) ||
+        matNum.includes(search) ||
+        school.includes(search) ||
+        dept.includes(search)
+      );
+    });
+  }
 
   res.render("dashboard", {
     user: req.dbUser,
-    students: studentsData
+    students: studentsData,
+    search
   });
 });
 
@@ -294,10 +309,13 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
   const totalDays = lastDay.getDate();
-  const startDayOfWeek = firstDay.getDay();
-  const days = Array(startDayOfWeek).fill(null);
-  for (let i = 1; i <= totalDays; i++) {
-    days.push(i);
+  const calendarDays = [];
+
+  for (let day = 1; day <= totalDays; day++) {
+    const date = new Date(year, month - 1, day);
+    if (date.getDay() !== 0) {
+      calendarDays.push(day);
+    }
   }
 
   res.render("all_logs", {
@@ -306,7 +324,7 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
     year,
     month,
     monthName: new Date(year, month - 1).toLocaleString("default", { month: "long" }),
-    calendarDays: days,
+    calendarDays,
     logsByDate,
   });
 });
@@ -340,21 +358,28 @@ app.post("/student/:matNumber/logs/:date/save-remark", authenticateToken, fetchU
   const { matNumber, date } = req.params;
   const { remark } = req.body;
 
-  if (!remark) {
-    return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Remark cannot be empty.")}`);
+  const cleanRemark = (remark || "").trim();
+  if (!cleanRemark) {
+  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Remark cannot be empty.")}`);
   }
 
-  const { data: log, error: logError } = await supabase.from("logs").select("*").eq("mat number", matNumber).eq("date", date).single();
+  const startOfDay = new Date(`${date}T00:00:00Z`).toISOString();
+  const endOfDay = new Date(`${date}T23:59:59Z`).toISOString();
+
+  const { data: logs, error: logError } = await supabase.from("logs").select("*").eq("mat number", matNumber.trim()).gte("date", startOfDay).lte("date", endOfDay);
+
+  const log = logs && logs.length > 0 ? logs[0] : null;
 
   if (logError || !log) {
-    return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Log not found.")}`);
+  console.error("Log fetch error:", logError);
+  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Log not found.")}`);
   }
 
-  const { error: updateError } = await supabase.from("logs").update({ remark }).eq("id", log.id);
+  const { error: updateError } = await supabase.from("logs").update({ remark: cleanRemark }).eq("id", log.id);
 
   if (updateError) {
-    return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Error updating remark.")}`);
-  }
+  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Error updating remark.")}`);
+}
 
   res.redirect(`/student/${matNumber}/logs/${date}?success=${encodeURIComponent("Remark saved successfully!")}`);
 });
