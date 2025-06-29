@@ -34,41 +34,40 @@
       <a href="?month=<%= month === 12 ? 1 : month + 1 %>&year=<%= month === 12 ? year + 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">Next &gt;</a>
     </div>
 
-    <div class="grid grid-cols-7 gap-2 mb-4 font-semibold text-gray-600">
-      <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+    <!-- Weekday headers without Sunday -->
+    <div class="grid grid-cols-6 gap-2 mb-4 font-semibold text-gray-600">
+      <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
     </div>
 
-    <div class="grid grid-cols-7 gap-2">
-    <% calendarDays.forEach(day => { %>
-    <% if (!day) { %>
-      <div></div>
-    <% } else {
-        const dayDate = new Date(year, month - 1, day)
-        const timezoneOffset = dayDate.getTimezoneOffset() * 60000; // offset in milliseconds
-        const localISODate = new Date(dayDate - timezoneOffset).toISOString().slice(0, 10);
+    <!-- Calendar Days -->
+    <div class="grid grid-cols-6 gap-2">
+    <% calendarDays.forEach(day => { 
+         const dayDate = new Date(year, month - 1, day)
+         const timezoneOffset = dayDate.getTimezoneOffset() * 60000;
+         const localISODate = new Date(dayDate - timezoneOffset).toISOString().slice(0, 10);
+         const dateString = new Date(year, month - 1, day).toISOString().split("T")[0];
+         const status = logsByDate[localISODate];
+         let dayClass = "bg-red-500";
 
-        const isToday = new Date().toDateString() === new Date(year, month - 1, day).toDateString();
-        const dateString = new Date(year, month - 1, day).toISOString().split("T")[0];
-        const status = logsByDate[localISODate];
-        let dayClass = "bg-red-500";
-        if (logsByDate[localISODate] === "remarked") {
-        dayClass = "bg-green-500"; 
-        } else if (logsByDate[localISODate] === "awaiting") {
-        dayClass = "bg-orange-500"; 
-        }
-        if (new Date(year, month - 1, day) > new Date()) {
-        dayClass = "bg-white"; 
-      }
-      %>
+         if (logsByDate[localISODate] === "remarked") {
+           dayClass = "bg-green-500";
+         } else if (logsByDate[localISODate] === "awaiting") {
+           dayClass = "bg-orange-500";
+         }
+
+         if (new Date(year, month - 1, day) > new Date()) {
+           dayClass = "bg-white";
+         }
+    %>
       <a href="/student/<%= encodeURIComponent(student['mat number']) %>/logs/<%= localISODate %>">
         <div class="h-20 flex items-center justify-center rounded hover:scale-105 transition <%= dayClass %>">
             <%= day %>
         </div>
       </a>
-    <% } %>
     <% }) %>
     </div>
 
+    <!-- Legend -->
     <div class="mt-6 flex space-x-4 text-sm font-semibold">
       <div class="flex items-center"><span class="inline-block w-4 h-4 bg-green-500 rounded mr-2"></span>Remarked</div>
       <div class="flex items-center"><span class="inline-block w-4 h-4 bg-orange-500 rounded mr-2"></span>Awaiting Remark</div>
