@@ -303,8 +303,17 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
     }
   });
 
+  const itStart = new Date (student.it_start_date);
+  const itEnd = new Date(student.it_end_date);
+
   const year = parseInt(req.query.year) || new Date().getFullYear();
   const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+
+  const currentMonthDate = new Date(year, month - 1);
+  if (currentMonthDate < new Date(itStart.getFullYear(), itStart.getMonth()) ||
+      currentMonthDate > new Date(itEnd.getFullYear(), itEnd.getMonth())) {
+    return res.status(403).send("Month outside IT duration.");
+  }
 
   const firstDay = new Date(year, month - 1, 1);
   const lastDay = new Date(year, month, 0);
@@ -318,6 +327,9 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
     }
   }
 
+  const canGoPrev = new Date(year, month - 2) >= new Date(itStart.getFullYear(), itStart.getMonth());
+  const canGoNext = new Date(year, month) <= new Date(itEnd.getFullYear(), itEnd.getMonth());
+
   res.render("all_logs", {
     user: req.dbUser,
     student,
@@ -326,6 +338,8 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
     monthName: new Date(year, month - 1).toLocaleString("default", { month: "long" }),
     calendarDays,
     logsByDate,
+    canGoPrev,
+    canGoNext
   });
 });
 
