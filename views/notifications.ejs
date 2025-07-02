@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Notifications</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-blue-50 font-sans min-h-screen flex">
+
+  <div class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+      <span class="text-2xl font-bold">👤</span>
+    </div>
+    <h2 class="text-xl font-bold"><%= user.Name %></h2>
+    <p class="text-sm"><%= user.Email_Address %></p>
+    <nav class="mt-6 space-y-4 text-left w-full">
+      <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+      <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
+      <a href="/notifications" class="block hover:text-yellow-300 font-semibold">🔔 Notification</a>
+      <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+      <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+    </nav>
+  </div>
+
+  <main class="flex-1 p-8 overflow-y-auto">
+    <h1 class="text-2xl font-bold text-blue-900 mb-6">Notifications</h1>
+
+    <% if (notifications.length > 0) { %>
+      <ul class="space-y-4">
+        <% notifications.forEach(note => { %>
+          <li class="bg-white rounded shadow p-4 border-l-4 <%= note.is_read ? 'border-gray-300' : 'border-orange-500' %>">
+            <p class="text-gray-800"><%= note.message %></p>
+            <p class="text-sm text-gray-500 mt-1"><%= new Date(note.created_at).toLocaleString() %></p>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p class="text-gray-500">You have no notifications.</p>
+    <% } %>
+  </main>
+</body>
+</html>
