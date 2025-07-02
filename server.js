@@ -433,6 +433,19 @@ app.get("/calendar", authenticateToken, fetchUserJWT, async (req, res) => {
   });
 });
 
+app.get("/notifications", authenticateToken, fetchUserJWT, async (req, res) => {
+  const supervisorEmail = req.dbUser.Email_Address;
+
+  const { data: notifications, error } = await supabase.from("notifications").select("*").eq("supervisor_email", supervisorEmail).order("created_at", { ascending: false });
+  
+  if (error) return res.status(500).send("Failed to load notifications."); 
+  
+  res.render("notifications", {
+    user: req.dbUser,
+    notifications,  
+  });
+});  
+
 app.get("/settings", authenticateToken, fetchUserJWT, async (req, res) => {
   res.render("settings", {
     user: req.dbUser,
