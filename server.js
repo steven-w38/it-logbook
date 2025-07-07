@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const validator = require('validator');
 const disposable = require('disposable-email-domains');
 const { parsePhoneNumber } = require('libphonenumber-js');
+const { render } = require('ejs');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -60,16 +61,84 @@ function generateCalendarDays(year, month) {
   for (let i = 1; i <= totalDays; i++) days.push(i);
   return days;
 }
+
 function isValidEmail(email) {
   return validator.isEmail(email);
 }
+
 function isDisposableEmail(email) {
   const domain = email.split('@')[1]?.toLowerCase();
   return disposable.includes(domain);
 }
+
 function isStrongPassword(password) {
   // At least 1 uppercase, 1 lowercase, 1 digit, 8 chars
   return /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/.test(password);
+}
+
+async function fetchUnreadNotifications(req, res, next) {
+  const email = req.dbUser?.Email_Address;
+  if (!email) {
+    res.locals.hasUnreadNotifications = false;
+    return next();
+  }  
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  const { data:unread, error } = await supabase.from('notifications').select('id').eq('supervisor_email', email).eq('read', false).gte('created_at', sevenDaysAgo.toISOString());
+  
+  if (error) {
+    console.error('Error fetching notifications:', error);
+    return res.status(500).send('Failed to fetch notifications.');
+  }
+  
+  res.locals.hasUnreadNotifications = unread.length > 0;
+  next();
+}
+
+async function reminderMiddleware(req, res, next) {
+  const supervisorEmail = req.dbUser?.Email_Address;
+  if (!supervisorEmail) return next();
+
+  const { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", supervisorEmail);
+
+  if (studentsError) {
+    console.error("Failed to fetch students for log reminder check:", studentsError);
+    return next();
+  }
+
+  const today = new Date();
+  const sevenDaysAgo = new Date(today);
+  sevenDaysAgo.setDate(today.getDate() - 7);
+
+  for (const student of studentsData) {
+    const matNumber = student["mat number"];
+
+    const { data: logs, error: logsError } = await supabase.from("logs").select("remark, date").eq("mat number", matNumber).gte("date", sevenDaysAgo.toISOString());
+
+    if (logsError|| !logs || logs.length === 0) continue;
+
+    const hasRemarked = logs.some(log => log.remark && log.remark.trim() !== "");
+
+    if (!hasRemarked) {
+      const { data: existing } = await supabase.from("notifications").select("id").eq("supervisor_email", supervisorEmail).eq("type", "unremarked_log").eq("student_mat_number", matNumber).gte("created_at", sevenDaysAgo.toISOString());
+
+      if (!existing || existing.length === 0) {
+        const message = `Reminder: No logs have been remarked for student ${matNumber} in the past 7 days.`;
+
+        await supabase.from("notifications").insert([{
+          supervisor_email: supervisorEmail,
+          type: "unremarked_log",
+          message,
+          student_mat_number: matNumber,
+          read: false
+        }]);
+      }
+    }
+  }
+
+  next();
 }
 
 app.get('/', (req, res) => res.render('supervisorForm', { error: null }));
@@ -207,34 +276,31 @@ app.post('/login', async (req, res) => {
   res.redirect('/dashboard');
 });
 
-app.get("/dashboard", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/dashboard", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const search = (req.query.search || "").trim().toLowerCase();
-  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*");
-  if (studentsError) return handleError(res, 'dashboard', 'Error fetching students.');
 
-  if (search) {
-    studentsData = studentsData.filter(s => {
-      const name = (s.name || "").toLowerCase();
-      const matNum = (s["mat number"] || "").toLowerCase();
-      const school = (s.school || "").toLowerCase();
-      const dept = (s.department || "").toLowerCase();
-      return (
-        name.includes(search) ||
-        matNum.includes(search) ||
-        school.includes(search) ||
-        dept.includes(search)
-      );
+  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", req.dbUser.Email_Address);
+
+  if (studentsError) {
+    console.error('Error fetching students:', studentsError);
+    return res.status(500).render('dashboard', {
+      user: req.dbUser,
+      students: [],
+      search: '',
+      hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      error: "Unable to fetch students."
     });
   }
 
   res.render("dashboard", {
     user: req.dbUser,
     students: studentsData,
-    search
+    search,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
-app.get("/student/:matNumber", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/student/:matNumber", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const matNumber = req.params.matNumber;
 
   const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
@@ -252,7 +318,8 @@ app.get("/student/:matNumber", authenticateToken, fetchUserJWT, async (req, res)
     logs,
     latestLog,
     success: req.query.success,
-    error: req.query.error
+    error: req.query.error,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
@@ -278,7 +345,7 @@ app.post("/student/:matNumber/save-remark", authenticateToken, fetchUserJWT, asy
   res.redirect(`/student/${matNumber}?success=Remark saved successfully!`);
 });
 
-app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware,  async (req, res) => {
   const matNumber = req.params.matNumber;
 
   const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
@@ -339,11 +406,12 @@ app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, async (req,
     calendarDays,
     logsByDate,
     canGoPrev,
-    canGoNext
+    canGoNext,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
-app.get("/student/:matNumber/logs/:date", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/student/:matNumber/logs/:date", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const { matNumber, date } = req.params;
 
   const normalizedDate = new Date(date).toISOString().split("T")[0];
@@ -364,7 +432,8 @@ app.get("/student/:matNumber/logs/:date", authenticateToken, fetchUserJWT, async
     log: logData,
     date: normalizedDate,
     success: req.query.success,
-    error: req.query.error
+    error: req.query.error,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
@@ -398,7 +467,7 @@ app.post("/student/:matNumber/logs/:date/save-remark", authenticateToken, fetchU
   res.redirect(`/student/${matNumber}/logs/${date}?success=${encodeURIComponent("Remark saved successfully!")}`);
 });
 
-app.get("/student/:matNumber/info", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/student/:matNumber/info", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const matNumber = req.params.matNumber;
 
   const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
@@ -409,10 +478,11 @@ app.get("/student/:matNumber/info", authenticateToken, fetchUserJWT, async (req,
   res.render("student_info", {
     user: req.dbUser,
     student,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
-app.get("/calendar", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/calendar", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const { month, year } = req.query;
 
   const userMonth = parseInt(month) || (new Date().getMonth() + 1);
@@ -429,11 +499,12 @@ app.get("/calendar", authenticateToken, fetchUserJWT, async (req, res) => {
     calendarDays,
     month: userMonth,
     year: userYear,
-    monthName: monthNames[userMonth - 1]
+    monthName: monthNames[userMonth - 1],
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
-app.get("/notifications", authenticateToken, fetchUserJWT, async (req, res) => {
+app.get("/notifications", authenticateToken, fetchUserJWT, fetchUnreadNotifications, async (req, res) => {
   const supervisorEmail = req.dbUser.Email_Address;
 
   const { data: notifications, error } = await supabase.from("notifications").select("*").eq("supervisor_email", supervisorEmail).order("created_at", { ascending: false });
@@ -443,14 +514,35 @@ app.get("/notifications", authenticateToken, fetchUserJWT, async (req, res) => {
   res.render("notifications", {
     user: req.dbUser,
     notifications,  
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });  
 
-app.get("/settings", authenticateToken, fetchUserJWT, async (req, res) => {
+app.delete("/notifications/:id", authenticateToken, fetchUserJWT, async (req, res) => {
+  const { id } = req.params;
+  const supervisorEmail = req.dbUser.Email_Address;
+
+  const { error } = await supabase.from("notifications").delete().eq("id", id).eq("supervisor_email", supervisorEmail);
+
+  if (error) return res.status(500).json({ success: false });
+  return res.json({ success: true });
+});
+
+app.delete("/notifications", authenticateToken, fetchUserJWT, async (req, res) => {
+  const supervisorEmail = req.dbUser.Email_Address;
+
+  const { error } = await supabase.from("notifications").delete().eq("supervisor_email", supervisorEmail);
+
+  if (error) return res.status(500).json({ success: false });
+  return res.json({ success: true });
+});
+
+app.get("/settings", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   res.render("settings", {
     user: req.dbUser,
     success: req.query.success,
-    error: req.query.error
+    error: req.query.error,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
   });
 });
 
