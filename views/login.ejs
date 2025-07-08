@@ -102,6 +102,10 @@ label {
     <div class="alert alert-danger" role="alert"><%= error %></div>
     <% } %>
 
+    <% if (success) { %>
+    <div class="alert alert-success" role="alert"><%= success %></div>
+    <% } %>
+
     <div class="form-wrapper">
       <form action="/login" method="POST" class="bg-white p-4 rounded shadow-sm" id="loginForm" novalidate>
         <div class="mb-3">
