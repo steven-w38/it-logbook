@@ -141,7 +141,10 @@ async function reminderMiddleware(req, res, next) {
   next();
 }
 
-app.get('/', (req, res) => res.render('login'));
+app.get('/', (req, res) => {
+  const success = req.query.success;
+  res.render('login', { error: null, success });
+});
 
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -483,7 +486,7 @@ app.get("/logout", (req, res) => {
 app.get('/submit-supervisor', (req, res) => res.render('supervisorForm', { error: null }));
 
 app.post('/submit-supervisor', async (req, res) => {
-  const { name, school, department, faculty, phone_number, email_address } = req.body;
+  const { name, department, phone_number, email_address, name_of_organization, designation, office_address } = req.body;
 
   if (!isValidEmail(email_address)) {
     return res.render('supervisorForm', { error: 'Invalid email format.' });
@@ -514,7 +517,7 @@ app.post('/submit-supervisor', async (req, res) => {
       email: email_address,
       otp,
       expires_at: expires_at.toISOString(),
-      temp_data: { name, school, department, faculty, phone_number: formattedphone, email_address }
+      temp_data: { name, department, phone_number, email_address, name_of_organization, designation, office_address }
     }]);
 
     const transporter = nodemailer.createTransport({
@@ -534,7 +537,7 @@ app.post('/submit-supervisor', async (req, res) => {
 });
 
 app.get('/verify-otp', (req, res) => {
-  res.render('verifyotp', { email: req.query.email, error: null });
+  res.render('verifyOtp', { email: req.query.email, error: null });
 });
 
 app.post('/verify-otp', async (req, res) => {
@@ -571,19 +574,21 @@ app.post('/create-password', async (req, res) => {
 
   const insertResult = await supabase.from('it_supervisor').insert([{
     Name: temp.name,
-    School: temp.school,
     Department: temp.department,
-    Faculty: temp.faculty,
     "Phone_Number": temp.phone_number,
     "Email_Address": temp.email_address,
+    "Name_Of_Organization": temp.name_of_organization,
+    Designation: temp.designation,
+    "Office_Address": temp.office_address,
     password: hashedPassword,
   }]);
   if (insertResult.error) {
+    console.error("Insert supervisor error:", insertResult.error);
     return res.render('createPassword', { email, error: 'Failed to save form.' });
   }
 
   await supabase.from('OTPs').delete().eq('email', email);
-  res.redirect('/');
+  res.redirect('/?success=Account created successfully! Please log in.');
 });
 
 app.listen(port, () => {
