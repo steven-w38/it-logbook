@@ -477,7 +477,7 @@ app.get("/logout", (req, res) => {
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
   });
-  res.redirect("/login");
+  res.redirect("/");
 });
 
 app.get('/submit-supervisor', (req, res) => res.render('supervisorForm', { error: null }));
@@ -583,7 +583,7 @@ app.post('/create-password', async (req, res) => {
   }
 
   await supabase.from('OTPs').delete().eq('email', email);
-  res.redirect('/login');
+  res.redirect('/');
 });
 
 app.listen(port, () => {
