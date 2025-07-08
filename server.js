@@ -141,113 +141,7 @@ async function reminderMiddleware(req, res, next) {
   next();
 }
 
-app.get('/', (req, res) => res.render('supervisorForm', { error: null }));
-
-app.post('/submit-supervisor', async (req, res) => {
-  const { name, school, department, faculty, phone_number, email_address } = req.body;
-
-  if (!isValidEmail(email_address)) {
-    return res.render('supervisorForm', { error: 'Invalid email format.' });
-  }
-  if (isDisposableEmail(email_address)) {
-    return res.render('supervisorForm', { error: 'Disposable emails are not allowed.' });
-  }
-
-  let formattedphone;
-  try {
-    const phone = parsePhoneNumber(phone_number, 'NG');
-    if (!phone.isValid() || phone.country !== 'NG') {
-      return res.render('supervisorForm', { error: 'Invalid phone number. Must be a valid Nigerian number.' });
-    }
-    formattedphone = phone.number;
-  } catch {
-    return res.render('supervisorForm', { error: 'Invalid phone number.' });
-  }
-
-  try {
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const { data: nowData, error: nowError } = await supabase.rpc('get_current_timestamp');
-    if (nowError) return handleError(res, 'supervisorForm', 'Could not verify server time.');
-
-    const expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
-
-    await supabase.from('OTPs').upsert([{
-      email: email_address,
-      otp,
-      expires_at: expires_at.toISOString(),
-      temp_data: { name, school, department, faculty, phone_number: formattedphone, email_address }
-    }]);
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    });
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: email_address,
-      subject: 'Your OTP Code',
-      text: `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
-    });
-    res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}`);
-  } catch (error) {
-    handleError(res, 'supervisorForm', 'Failed to send OTP.', 500);
-  }
-});
-
-app.get('/verify-otp', (req, res) => {
-  res.render('verifyotp', { email: req.query.email, error: null });
-});
-
-app.post('/verify-otp', async (req, res) => {
-  const { email, otp: userOtp } = req.body;
-
-  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
-  if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.' });
-  if (Date.now() > new Date(data.expires_at)) return res.render('verifyOtp', { email, error: 'OTP expired.' });
-  if (data.otp !== userOtp) return res.render('verifyOtp', { email, error: 'Incorrect OTP.' });
-  res.redirect(`/create-password?email=${encodeURIComponent(email)}`);
-});
-
-app.get('/create-password', (req, res) => {
-  res.render('createPassword', { email: req.query.email, error: null });
-});
-
-app.post('/create-password', async (req, res) => {
-  const { email, password, confirmPassword } = req.body;
-
-  if (password !== confirmPassword) {
-    return res.render('createPassword', { email, error: 'Passwords do not match.' });
-  }
-  if (!isStrongPassword(password)) {
-    return res.render('createPassword', { email, error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).' });
-  }
-
-  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
-  if (error || !data || !data.temp_data) {
-    return res.render('createPassword', { email, error: 'No temporary data found.' });
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 12);
-  const temp = data.temp_data;
-
-  const insertResult = await supabase.from('it_supervisor').insert([{
-    Name: temp.name,
-    School: temp.school,
-    Department: temp.department,
-    Faculty: temp.faculty,
-    "Phone_Number": temp.phone_number,
-    "Email_Address": temp.email_address,
-    password: hashedPassword,
-  }]);
-  if (insertResult.error) {
-    return res.render('createPassword', { email, error: 'Failed to save form.' });
-  }
-
-  await supabase.from('OTPs').delete().eq('email', email);
-  res.redirect('/login');
-});
-
-app.get('/login', (req, res) => res.render('login', { error: null }));
+app.get('/', (req, res) => res.render('login'));
 
 app.post('/login', async (req, res) => {
   const { email, password } = req.body;
@@ -584,6 +478,112 @@ app.get("/logout", (req, res) => {
     sameSite: "strict",
   });
   res.redirect("/login");
+});
+
+app.get('/submit-supervisor', (req, res) => res.render('supervisorForm', { error: null }));
+
+app.post('/submit-supervisor', async (req, res) => {
+  const { name, school, department, faculty, phone_number, email_address } = req.body;
+
+  if (!isValidEmail(email_address)) {
+    return res.render('supervisorForm', { error: 'Invalid email format.' });
+  }
+  if (isDisposableEmail(email_address)) {
+    return res.render('supervisorForm', { error: 'Disposable emails are not allowed.' });
+  }
+
+  let formattedphone;
+  try {
+    const phone = parsePhoneNumber(phone_number, 'NG');
+    if (!phone.isValid() || phone.country !== 'NG') {
+      return res.render('supervisorForm', { error: 'Invalid phone number. Must be a valid Nigerian number.' });
+    }
+    formattedphone = phone.number;
+  } catch {
+    return res.render('supervisorForm', { error: 'Invalid phone number.' });
+  }
+
+  try {
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const { data: nowData, error: nowError } = await supabase.rpc('get_current_timestamp');
+    if (nowError) return handleError(res, 'supervisorForm', 'Could not verify server time.');
+
+    const expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await supabase.from('OTPs').upsert([{
+      email: email_address,
+      otp,
+      expires_at: expires_at.toISOString(),
+      temp_data: { name, school, department, faculty, phone_number: formattedphone, email_address }
+    }]);
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email_address,
+      subject: 'Your OTP Code',
+      text: `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
+    });
+    res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}`);
+  } catch (error) {
+    handleError(res, 'supervisorForm', 'Failed to send OTP.', 500);
+  }
+});
+
+app.get('/verify-otp', (req, res) => {
+  res.render('verifyotp', { email: req.query.email, error: null });
+});
+
+app.post('/verify-otp', async (req, res) => {
+  const { email, otp: userOtp } = req.body;
+
+  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
+  if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.' });
+  if (Date.now() > new Date(data.expires_at)) return res.render('verifyOtp', { email, error: 'OTP expired.' });
+  if (data.otp !== userOtp) return res.render('verifyOtp', { email, error: 'Incorrect OTP.' });
+  res.redirect(`/create-password?email=${encodeURIComponent(email)}`);
+});
+
+app.get('/create-password', (req, res) => {
+  res.render('createPassword', { email: req.query.email, error: null });
+});
+
+app.post('/create-password', async (req, res) => {
+  const { email, password, confirmPassword } = req.body;
+
+  if (password !== confirmPassword) {
+    return res.render('createPassword', { email, error: 'Passwords do not match.' });
+  }
+  if (!isStrongPassword(password)) {
+    return res.render('createPassword', { email, error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).' });
+  }
+
+  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
+  if (error || !data || !data.temp_data) {
+    return res.render('createPassword', { email, error: 'No temporary data found.' });
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 12);
+  const temp = data.temp_data;
+
+  const insertResult = await supabase.from('it_supervisor').insert([{
+    Name: temp.name,
+    School: temp.school,
+    Department: temp.department,
+    Faculty: temp.faculty,
+    "Phone_Number": temp.phone_number,
+    "Email_Address": temp.email_address,
+    password: hashedPassword,
+  }]);
+  if (insertResult.error) {
+    return res.render('createPassword', { email, error: 'Failed to save form.' });
+  }
+
+  await supabase.from('OTPs').delete().eq('email', email);
+  res.redirect('/login');
 });
 
 app.listen(port, () => {
