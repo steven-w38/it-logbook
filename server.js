@@ -10,6 +10,7 @@ const validator = require('validator');
 const disposable = require('disposable-email-domains');
 const { parsePhoneNumber } = require('libphonenumber-js');
 const { render } = require('ejs');
+const { error } = require('console');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -147,29 +148,42 @@ app.get('/', (req, res) => {
 });
 
 app.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const email = req.body.email.trim().toLowerCase();
+  const password = req.body.password;
 
   if (!email || !password) {
-    return res.render('login', { error: 'Email and password required.' });
+    return res.render('login', { error: 'Email and password required.', success: null });
   }
 
-  const { data: user, error } = await supabase.from('it_supervisor').select('*').eq('Email_Address', email).single();
-  if (error || !user) {
-    return res.render('login', { error: 'Invalid email or password.' });
+  const { data: users, error } = await supabase
+    .from('it_supervisor')
+    .select('*')
+    .eq('Email_Address', email);
+
+  if (error || !users || users.length !== 1) {
+    return res.render('login', { error: 'Invalid email or password.', success: null });
   }
+
+  const user = users[0];
 
   const validPass = await bcrypt.compare(password, user.password);
   if (!validPass) {
-    return res.render('login', { error: 'Invalid email or password.' });
+    return res.render('login', { error: 'Invalid email or password.', success: null });
   }
 
-  const token = jwt.sign({ email: user.Email_Address, name: user.Name }, process.env.JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  const token = jwt.sign(
+    { email: user.Email_Address, name: user.Name },
+    process.env.JWT_SECRET,
+    { expiresIn: JWT_EXPIRY }
+  );
+
   res.cookie('token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 60 * 60 * 1000,
     sameSite: 'strict',
   });
+
   res.redirect('/dashboard');
 });
 
@@ -486,7 +500,7 @@ app.get("/logout", (req, res) => {
 app.get('/submit-supervisor', (req, res) => res.render('supervisorForm', { error: null }));
 
 app.post('/submit-supervisor', async (req, res) => {
-  const { name, department, phone_number, email_address, name_of_organization, designation, office_address } = req.body;
+  const email_address = req.body.email_address.trim().toLowerCase();
 
   if (!isValidEmail(email_address)) {
     return res.render('supervisorForm', { error: 'Invalid email format.' });
@@ -495,15 +509,20 @@ app.post('/submit-supervisor', async (req, res) => {
     return res.render('supervisorForm', { error: 'Disposable emails are not allowed.' });
   }
 
-  let formattedphone;
-  try {
-    const phone = parsePhoneNumber(phone_number, 'NG');
-    if (!phone.isValid() || phone.country !== 'NG') {
-      return res.render('supervisorForm', { error: 'Invalid phone number. Must be a valid Nigerian number.' });
-    }
-    formattedphone = phone.number;
-  } catch {
-    return res.render('supervisorForm', { error: 'Invalid phone number.' });
+  const { data: supervisor, error: supervisorError } = await supabase
+  .from('it_supervisor')
+  .select('*')
+  .eq('Email_Address', email_address)
+  .single();
+
+  if (supervisorError || !supervisor) {
+  console.error("Supervisor email fetch error:", supervisorError);
+  return res.render('supervisorForm', { error: 'Email not found in supervisor records.' });
+  }
+
+  if (supervisor.password) {
+    console.error("Supervisor already has an account:", supervisor);
+    return res.render('supervisorForm', { error: 'Account already exists. Please log in.' });
   }
 
   try {
@@ -517,19 +536,21 @@ app.post('/submit-supervisor', async (req, res) => {
       email: email_address,
       otp,
       expires_at: expires_at.toISOString(),
-      temp_data: { name, department, phone_number, email_address, name_of_organization, designation, office_address }
+      temp_data: { email_address }
     }]);
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     });
+
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email_address,
       subject: 'Your OTP Code',
       text: `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
     });
+
     res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}`);
   } catch (error) {
     handleError(res, 'supervisorForm', 'Failed to send OTP.', 500);
@@ -537,11 +558,16 @@ app.post('/submit-supervisor', async (req, res) => {
 });
 
 app.get('/verify-otp', (req, res) => {
-  res.render('verifyOtp', { email: req.query.email, error: null });
+  const email = req.query.email?.trim().toLowerCase() || '';
+  if (!email) {
+    return res.status(400).send("Missing email.");
+  }
+  res.render('verifyOtp', { email, error: null });
 });
 
 app.post('/verify-otp', async (req, res) => {
-  const { email, otp: userOtp } = req.body;
+  const email = req.body.email.trim().toLowerCase(); 
+  const userOtp = req.body.otp;
 
   const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
   if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.' });
@@ -551,11 +577,17 @@ app.post('/verify-otp', async (req, res) => {
 });
 
 app.get('/create-password', (req, res) => {
-  res.render('createPassword', { email: req.query.email, error: null });
+  const email = (req.query.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).send('Missing email.');
+  }
+  res.render('createPassword', { email, error: null });
 });
 
 app.post('/create-password', async (req, res) => {
-  const { email, password, confirmPassword } = req.body;
+  const email = req.body.email.trim().toLowerCase();
+  const password = req.body.password;
+  const confirmPassword = req.body.confirmPassword;
 
   if (password !== confirmPassword) {
     return res.render('createPassword', { email, error: 'Passwords do not match.' });
@@ -572,19 +604,10 @@ app.post('/create-password', async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, 12);
   const temp = data.temp_data;
 
-  const insertResult = await supabase.from('it_supervisor').insert([{
-    Name: temp.name,
-    Department: temp.department,
-    "Phone_Number": temp.phone_number,
-    "Email_Address": temp.email_address,
-    "Name_Of_Organization": temp.name_of_organization,
-    Designation: temp.designation,
-    "Office_Address": temp.office_address,
-    password: hashedPassword,
-  }]);
-  if (insertResult.error) {
-    console.error("Insert supervisor error:", insertResult.error);
-    return res.render('createPassword', { email, error: 'Failed to save form.' });
+  const updateResult = await supabase.from('it_supervisor').update({ password: hashedPassword }).eq('Email_Address', temp.email_address);
+  if (updateResult.error) {
+    console.error("Update supervisor error:", updateResult.error);
+    return res.render('createPassword', { email, error: 'Failed to create account.' });
   }
 
   await supabase.from('OTPs').delete().eq('email', email);
