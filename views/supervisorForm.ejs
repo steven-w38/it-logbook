@@ -86,8 +86,8 @@
 <body>
   <div class="container">
     <div class="blue-heading mb-4">
-      <h2 class="mb-0">IT Supervisor Information Form</h2>
-      <p class="mb-0">Please Fill In Details Accurately</p>
+      <h2 class="mb-0">IT Supervisor Sign-Up</h2>
+      <p class="mb-0">Enter Official Email Address</p>
     </div>
 
     <% if (typeof error !== 'undefined' && error) { %>
@@ -96,57 +96,6 @@
 
     <div class="form-wrapper">
       <form action="/submit-supervisor" method="POST" class="bg-white p-4 rounded shadow-sm" novalidate>
-
-        <div class="mb-3">
-          <label for="name" class="form-label">Name</label>
-          <input 
-            type="text" 
-            class="form-control" 
-            id="name" 
-            name="name" 
-            required 
-            autocomplete="name"
-            placeholder="Enter your full name"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="department" class="form-label">Department</label>
-          <input 
-            type="text" 
-            class="form-control" 
-            id="department" 
-            name="department" 
-            required 
-            placeholder="Enter your department"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="faculty" class="form-label">Designation</label>
-          <input 
-            type="text" 
-            class="form-control" 
-            id="designation" 
-            name="designation" 
-            required 
-            placeholder="Enter your designation"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="phone_number" class="form-label">Phone Number</label>
-          <input 
-            type="tel" 
-            class="form-control" 
-            id="phone_number" 
-            name="phone_number" 
-            required 
-            placeholder="e.g. 08012345678 or +2348012345678" 
-            pattern="^(\+234|0)[789][01]\d{8}$" 
-            title="Enter a valid Nigerian phone number starting with +234 or 0"
-          />
-        </div>
 
         <div class="mb-3">
           <label for="email_address" class="form-label">Email Address</label>
@@ -158,30 +107,6 @@
             required 
             placeholder="Enter your email address"
             autocomplete="email"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="email_address" class="form-label">Name Of Organization</label>
-          <input 
-            type="email" 
-            class="form-control" 
-            id="name_of_organization" 
-            name="name_of_organization" 
-            required 
-            placeholder="Enter your organization's name"
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="email_address" class="form-label">Office Address</label>
-          <input 
-            type="email" 
-            class="form-control" 
-            id="office_address" 
-            name="office_address" 
-            required 
-            placeholder="Enter your office address"
           />
         </div>
 
