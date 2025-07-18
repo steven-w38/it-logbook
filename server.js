@@ -11,6 +11,7 @@ const disposable = require('disposable-email-domains');
 const { parsePhoneNumber } = require('libphonenumber-js');
 const { render } = require('ejs');
 const { error } = require('console');
+const { register } = require('module');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -32,9 +33,9 @@ function handleError(res, view, error, status = 500) {
 
 function authenticateToken(req, res, next) {
   const token = req.cookies?.token;
-  if (!token) return res.redirect('/login');
+  if (!token) return res.redirect('/');
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) return res.redirect('/login');
+    if (err) return res.redirect('/');
     req.tokenData = user;
     next();
   });
@@ -143,7 +144,7 @@ async function reminderMiddleware(req, res, next) {
 }
 
 app.get('/', (req, res) => {
-  const success = req.query.success;
+  const success = req.query.success || null;
   res.render('login', { error: null, success });
 });
 
@@ -559,46 +560,50 @@ app.post('/submit-supervisor', async (req, res) => {
 
 app.get('/verify-otp', (req, res) => {
   const email = req.query.email?.trim().toLowerCase() || '';
+  const mode  = req.query.mode || 'register';
   if (!email) {
     return res.status(400).send("Missing email.");
   }
-  res.render('verifyOtp', { email, error: null });
+  res.render('verifyOtp', { email, error: null, mode });
 });
 
 app.post('/verify-otp', async (req, res) => {
   const email = req.body.email.trim().toLowerCase(); 
   const userOtp = req.body.otp;
+  const mode = req.body.mode || 'register';
 
   const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
-  if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.' });
-  if (Date.now() > new Date(data.expires_at)) return res.render('verifyOtp', { email, error: 'OTP expired.' });
-  if (data.otp !== userOtp) return res.render('verifyOtp', { email, error: 'Incorrect OTP.' });
-  res.redirect(`/create-password?email=${encodeURIComponent(email)}`);
+  if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.', mode });
+  if (Date.now() > new Date(data.expires_at)) return res.render('verifyOtp', { email, error: 'OTP expired.', mode });
+  if (data.otp !== userOtp) return res.render('verifyOtp', { email, error: 'Incorrect OTP.', mode });
+  res.redirect(`/create-password?email=${encodeURIComponent(email)}&mode=${mode}`);
 });
 
 app.get('/create-password', (req, res) => {
   const email = (req.query.email || '').trim().toLowerCase();
+  const mode = req.query.mode || 'register';
   if (!email) {
     return res.status(400).send('Missing email.');
   }
-  res.render('createPassword', { email, error: null });
+  res.render('createPassword', { email, error: null, mode });
 });
 
 app.post('/create-password', async (req, res) => {
   const email = req.body.email.trim().toLowerCase();
   const password = req.body.password;
   const confirmPassword = req.body.confirmPassword;
+  const mode = req.body.mode || 'register';
 
   if (password !== confirmPassword) {
-    return res.render('createPassword', { email, error: 'Passwords do not match.' });
+    return res.render('createPassword', { email, error: 'Passwords do not match.', mode });
   }
   if (!isStrongPassword(password)) {
-    return res.render('createPassword', { email, error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).' });
+    return res.render('createPassword', { email, error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).', mode });
   }
 
   const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
   if (error || !data || !data.temp_data) {
-    return res.render('createPassword', { email, error: 'No temporary data found.' });
+    return res.render('createPassword', { email, error: 'No temporary data found.', mode });
   }
 
   const hashedPassword = await bcrypt.hash(password, 12);
@@ -607,11 +612,68 @@ app.post('/create-password', async (req, res) => {
   const updateResult = await supabase.from('it_supervisor').update({ password: hashedPassword }).eq('Email_Address', temp.email_address);
   if (updateResult.error) {
     console.error("Update supervisor error:", updateResult.error);
-    return res.render('createPassword', { email, error: 'Failed to create account.' });
+    return res.render('createPassword', { email, error: 'Failed to create account.', mode });
   }
 
   await supabase.from('OTPs').delete().eq('email', email);
-  res.redirect('/?success=Account created successfully! Please log in.');
+
+  if (mode === 'reset') {
+    return res.redirect('/?success=password-reset');
+  } else {
+    res.redirect('/?success=account-created');
+  }
+});
+
+app.get('/forgot-password', (req, res) => {
+  res.render('forgotPassword', { error: null });
+}); 
+
+app.post('/forgot-password', async (req, res) => {
+  const email_address = req.body.email_address.trim().toLowerCase();
+
+  if (!isValidEmail(email_address)) {
+    return res.render('forgotPassword', { error: 'Invalid email format.' });
+  }
+  if (isDisposableEmail(email_address)) {
+    return res.render('forgotPassword', { error: 'Disposable emails are not allowed.'});
+  }
+
+  const { data: supervisor, error } = await supabase.from('it_supervisor').select('*').eq('Email_Address', email_address).single();
+
+  if (error || !supervisor) {
+    return res.render('forgotPassword', {error: 'Email not found in supervisor records.'});
+  }
+
+  if  (error || !supervisor || !supervisor.password) {
+    return res.render('forgotPassword', { error: 'Account not found or not yet registered' });
+  }
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const { data: nowData, error:nowError } = await supabase.rpc('get_current_timestamp');
+  if (nowError) return handleError(res, 'forgotPassword', 'Could not verify server time.');
+
+  const  expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+  await supabase.from('OTPs').upsert([{
+    email: email_address,
+    otp,
+    expires_at: expires_at.toISOString(),
+    temp_data: { email_address}
+  }]);
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS,}
+  });
+
+  await transporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: email_address,
+    subject: 'Your OTP Code',
+    text:  `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
+  });
+
+  res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}&mode=reset`);
 });
 
 app.listen(port, () => {
