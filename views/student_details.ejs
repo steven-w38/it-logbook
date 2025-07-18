@@ -48,6 +48,19 @@
             <div class="border-b p-2">
               <p><strong>Date:</strong> <%= new Date(latestLog.date).toLocaleDateString() %></p>
               <p><strong>Log:</strong> <%= latestLog.log %></p>
+
+              <% if (latestLog.image_url) { %>
+                <div class="mt-4">
+                  <p class="font-semibold text-gray-700 mb-2">Attached Image:</p>
+                  <img src="<%= latestLog.image_url %>" alt="Student Log Image" 
+                       class="max-w-full h-auto border border-gray-300 rounded shadow-sm" />
+                  <div class="mt-2">
+                    <a href="<%= latestLog.image_url %>" target="_blank" class="text-blue-600 underline">
+                      View Full Size
+                    </a>
+                  </div>
+                </div>
+              <% } %>
             </div>
           <% } else { %>
             <p class="text-gray-500">No logs available for this student.</p>

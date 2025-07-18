@@ -102,9 +102,12 @@ label {
     <div class="alert alert-danger" role="alert"><%= error %></div>
     <% } %>
 
-    <% if (success) { %>
-    <div class="alert alert-success" role="alert"><%= success %></div>
-    <% } %>
+      <% if (success === 'account-created') { %>
+  <div class="alert alert-success" role="alert">Account created successfully. You can now log in.</div>
+<% } else if (success === 'password-reset') { %>
+  <div class="alert alert-success" role="alert">Password reset successful. You can now log in.</div>
+<% } %>
+
 
     <div class="form-wrapper">
       <form action="/login" method="POST" class="bg-white p-4 rounded shadow-sm" id="loginForm" novalidate>
@@ -136,6 +139,10 @@ label {
             />
             <span id="togglePassword" class="password-toggle">🙈</span>
           </div>
+        </div>
+
+        <div class="mb-3 text-end">
+          <a href="/forgot-password" class="text-blue-600 hover:underline">Forgot password?</a>
         </div>
 
         <div class="text-end">

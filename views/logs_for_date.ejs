@@ -35,6 +35,13 @@
       <div class="bg-white p-4 rounded shadow mt-6">
         <h3 class="text-lg font-semibold">Student's Log</h3>
         <p class="mt-2 text-gray-700"><%= log.log %></p>
+
+        <% if (log.image_url) { %>
+          <div class="mt-4">
+            <h4 class="text-md font-semibold mb-2">Attached Image:</h4>
+            <img src="<%= log.image_url %>" alt="Log Image" class="max-w-full rounded shadow border" />
+          </div>
+        <% } %>
       </div>
 
       <section class="bg-white p-4 rounded shadow mt-6">

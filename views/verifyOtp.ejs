@@ -100,6 +100,7 @@
     <div class="form-wrapper">
       <form action="/verify-otp" method="POST" class="bg-white p-4 rounded shadow-sm" novalidate>
         <input type="hidden" name="email" value="<%= email %>" />
+          <input type="hidden" name="mode" value="<%= mode %>" />
 
         <div class="mb-3">
           <label for="otp" class="form-label">OTP</label>
