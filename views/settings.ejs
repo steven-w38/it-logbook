@@ -19,8 +19,10 @@
     </div>
     <h2 class="text-xl font-bold"><%= user.Name %></h2>
     <p class="text-sm mb-6"><%= user.Email_Address %></p>
-    <nav class="space-y-4 w-full text-left">
-      <a href="/dashboard" class="block hover:text-blue-300">👥 Students</a>
+    <nav class="mt-6 text-left w-full flex flex-col h-full">
+      <div class="space-y-4 flex-grow">
+      <a href="/supervisorDashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">📊 Dashboard</a>
+      <a href="/students" class="block hover:text-blue-300">👥 Students</a>
       <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
       <a href="/notifications" class="block hover:text-blue-300">
       🔔 Notifications
@@ -29,7 +31,10 @@
       <% } %>
       </a>
       <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+      </div>
+      <div>
       <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+      </div>
     </nav>
   </aside>
 

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Supervisor Dashboard</title>
+  <title>Students</title>
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -14,18 +14,23 @@
     </div>
     <h2 class="text-xl font-bold"><%= user.Name %></h2>
     <p class="text-sm mb-6"><%= user.Email_Address %></p>
-    <nav aria-label="Primary" class="space-y-4 w-full text-left">
-      <a href="/dashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">👥 Students</a>
-      <a href="/calendar" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🗓️ Calendar</a>
-      <a href="/notifications" class="block hover:text-blue-300">
-      🔔 Notifications
-      <% if (hasUnreadNotifications) { %>
-      <span class="text-red-500 ml-2 font-bold">●</span>
-      <% } %>
+    <nav aria-label="Primary" class="flex flex-col h-full w-full text-left">
+      <div class="space-y-4">
+        <a href="/supervisorDashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">📊 Dashboard</a>
+        <a href="/students" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">👥 Students</a>
+        <a href="/calendar" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🗓️ Calendar</a>
+        <a href="/notifications" class="block hover:text-blue-300">
+         🔔 Notifications
+         <% if (hasUnreadNotifications) { %>
+          <span class="text-red-500 ml-2 font-bold">●</span>
+          <% } %>
       </a>
-
-      <a href="/settings" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">⚙️ Settings</a>
-      <a href="/logout" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🚪 Logout</a>
+        <a href="/settings" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">⚙️ Settings</a>
+      </div>
+      <div class="flex-grow"></div>
+      <div>
+        <a href="/logout" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🚪 Logout</a>
+      </div>
     </nav>
   </aside>
 
