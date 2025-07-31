@@ -17,7 +17,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.API_KEY);
-const OTP_EXPIRY_MINUTES = parseInt(process.env.OTP_EXPIRY_MINUTES || '5', 10);
+const OTP_EXPIRY_MINUTES = 10;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
 
 app.use(express.urlencoded({ extended: true }));
@@ -185,17 +185,58 @@ app.post('/login', async (req, res) => {
     sameSite: 'strict',
   });
 
-  res.redirect('/dashboard');
+  res.redirect('/supervisorDashboard');
 });
 
-app.get("/dashboard", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
+app.get('/supervisorDashboard', authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
+
+  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", req.dbUser.Email_Address);
+
+  if (studentsError) {
+    console.error('Error fetching students:', studentsError);
+    return res.status(500).render('supervisorDashboard', {
+      user: req.dbUser,
+      students:[],
+      studentCount: 0,
+      notificationCount: 0,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      error: "Unable to fetch students."
+    });
+  }
+  const studentCount = studentsData.length
+
+  const {data: notifications, error: notificationsError} = await supabase.from("notifications").select("*").eq("supervisor_email", req.dbUser.Email_Address);
+  
+  if (notificationsError) {
+    console.error('Error fetching notifications:', notificationsError);
+    return res.status(500).render('supervisorDashboard', {
+      user: req.dbUser,
+      students:[],
+      studentCount: 0,
+      notificationCount: 0,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      error: "Unable to fetch notifications."
+    });
+  }
+  const notificationCount = notifications.length;
+
+  res.render("supervisorDashboard",{
+    user: req.dbUser,
+    students:studentsData,
+    studentCount,
+    notificationCount,
+    hasUnreadNotifications: res.locals.hasUnreadNotifications
+  });
+});
+
+app.get("/students", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const search = (req.query.search || "").trim().toLowerCase();
 
   let { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", req.dbUser.Email_Address);
 
   if (studentsError) {
     console.error('Error fetching students:', studentsError);
-    return res.status(500).render('dashboard', {
+    return res.status(500).render('students', {
       user: req.dbUser,
       students: [],
       search: '',
@@ -204,7 +245,7 @@ app.get("/dashboard", authenticateToken, fetchUserJWT, fetchUnreadNotifications,
     });
   }
 
-  res.render("dashboard", {
+  res.render("students", {
     user: req.dbUser,
     students: studentsData,
     search,
@@ -569,14 +610,120 @@ app.get('/verify-otp', (req, res) => {
 
 app.post('/verify-otp', async (req, res) => {
   const email = req.body.email.trim().toLowerCase(); 
-  const userOtp = req.body.otp;
   const mode = req.body.mode || 'register';
 
-  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
-  if (error || !data) return res.render('verifyOtp', { email, error: 'OTP not found.', mode });
-  if (Date.now() > new Date(data.expires_at)) return res.render('verifyOtp', { email, error: 'OTP expired.', mode });
-  if (data.otp !== userOtp) return res.render('verifyOtp', { email, error: 'Incorrect OTP.', mode });
+  const enteredOtp = (req.body.otp || []).join('').trim();
+
+  const { data, error } = await supabase
+    .from('OTPs')
+    .select('*')
+    .eq('email', email)
+    .single();
+
+  if (error || !data) {
+    return res.render('verifyOtp', { email, error: 'OTP not found.', mode });
+  }
+
+  if (Date.now() > new Date(data.expires_at)) {
+    return res.render('verifyOtp', { email, error: 'OTP expired.', mode });
+  }
+
+  if (data.otp !== enteredOtp) {
+    return res.render('verifyOtp', { email, error: 'Incorrect OTP.', mode });
+  }
+
   res.redirect(`/create-password?email=${encodeURIComponent(email)}&mode=${mode}`);
+});
+
+app.post('/resend-otp', async (req, res) => {
+  const email = (req.body.email || '').trim().toLowerCase();
+  const mode = req.body.mode || 'register';
+
+  if (!email || !isValidEmail(email)) {
+    return res.status(400).send('Valid email is required to resend OTP.');
+  }
+
+  try {
+    const { data: otpEntry, error: otpFetchError } = await supabase
+      .from('OTPs')
+      .select('*')
+      .eq('email', email)
+      .single();
+
+    if (otpFetchError && otpFetchError.code !== 'PGRST116') {
+      console.error('Error fetching OTP entry:', otpFetchError);
+      return res.status(500).send('Server error.');
+    }
+
+    const now = new Date();
+
+    if (otpEntry) {
+      const lastResend = otpEntry.last_resend ? new Date(otpEntry.last_resend) : null;
+      const resendCount = otpEntry.resend_count || 0;
+
+      if (resendCount >= 3) {
+        if (lastResend) {
+          const cooldownEnd = new Date(lastResend.getTime() + 30 * 60 * 1000);
+          if (now < cooldownEnd) {
+            const waitMinutes = Math.ceil((cooldownEnd - now) / 60000);
+    
+            return res.render('verifyOtp', {
+              email,
+              error: `Resend limit reached. Please try again in ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`,
+              mode,
+              resendDisabled: true,
+              waitMinutes,
+            });
+          } else {
+
+            await supabase.from('OTPs').update({
+              resend_count: 0,
+              last_resend: null,
+            }).eq('email', email);
+          }
+        }
+      }
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const { data: nowData, error: nowError } = await supabase.rpc('get_current_timestamp');
+    if (nowError) {
+      console.error('Error getting server time:', nowError);
+      return res.status(500).send('Server error.');
+    }
+    const expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    const updatedResendCount = otpEntry ? (otpEntry.resend_count || 0) + 1 : 1;
+    const lastResendTimestamp = now.toISOString();
+
+    await supabase.from('OTPs').upsert([{
+      email,
+      otp,
+      expires_at: expires_at.toISOString(),
+      temp_data: { email_address: email },
+      resend_count: updatedResendCount,
+      last_resend: lastResendTimestamp,
+    }], { onConflict: 'email' });
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Your OTP Code (Resent)',
+      text: `Your new OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
+    });
+
+    res.redirect(`/verify-otp?email=${encodeURIComponent(email)}&mode=${mode}&success=otp-resent`);
+
+  } catch (error) {
+    console.error('Error resending OTP:', error);
+    res.status(500).send('Failed to resend OTP.');
+  }
 });
 
 app.get('/create-password', (req, res) => {
