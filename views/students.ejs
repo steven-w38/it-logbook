@@ -63,7 +63,7 @@
       if (!term || !text) return text;
       const safeTerm = term.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
       const regex = new RegExp(safeTerm, 'gi');
-      return text.replace(regex, match => `<span class="bg-yellow-200 font-semibold">${match}</span>`);
+      return text.replace(regex, match => `<span class="bg-orange-500 font-semibold">${match}</span>`);
     }
     %>
 
@@ -71,7 +71,7 @@
       <div class="bg-white rounded shadow p-4 overflow-x-auto">
         <table class="table-auto w-full text-gray-600" role="grid" aria-label="Students List">
           <thead>
-            <tr class="bg-gray-100 text-gray-800 text-left">
+           <tr class="bg-blue-900 text-white text-left">
               <th scope="col" class="p-3">Mat Number</th>
               <th scope="col" class="p-3">Name</th>
               <th scope="col" class="p-3">School</th>
@@ -97,6 +97,9 @@
             <% }) %>
           </tbody>
         </table>
+        <div id="no-results" class="hidden bg-white rounded p-4 text-gray-600 text-center py-20">
+          No matching item found.
+        </div>
       </div>
     <% } else { %>
       <div class="bg-white rounded p-4 text-gray-600 text-center py-20">No students available.</div>
@@ -126,7 +129,46 @@
         });
       });
     });
-  </script>
 
+    document.addEventListener('DOMContentLoaded', () => {
+      const searchInput = document.querySelector('input[name="search"]');
+      const rows = document.querySelectorAll('tbody tr');
+      const noResults = document.getElementById('no-results');
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    searchInput.addEventListener('input', () => {
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      const regex = new RegExp(escapeRegExp(searchTerm), 'gi');
+      let visibleCount = 0;
+
+    rows.forEach(row => {
+      const rowText = Array.from(row.cells)
+        .map(cell => cell.textContent.toLowerCase())
+        .join(' ');
+
+      if (rowText.includes(searchTerm)) {
+        row.style.display = '';
+        visibleCount++;
+
+        Array.from(row.cells).forEach(cell => {
+          const originalText = cell.textContent;
+          if (searchTerm === '') {
+            cell.innerHTML = originalText;
+          } else {
+            cell.innerHTML = originalText.replace(regex, match => `<span class="bg-orange-500 font-semibold">${match}</span>`);
+          }
+        });
+        } else {
+          row.style.display = 'none';
+        }
+    });
+
+    noResults.classList.toggle('hidden', visibleCount > 0);
+  });
+});
+  </script>
 </body>
 </html>

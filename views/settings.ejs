@@ -204,6 +204,77 @@
     <% } else if (typeof error !== 'undefined' && error) { %>
       showMessage("<%= error %>", "red");
     <% } %>
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const messageDiv = document.getElementById('message');
+      const form = document.getElementById('changePasswordForm');
+      const currentPasswordInput = form.currentPassword;
+      const newPasswordInput = form.newPassword;
+      const confirmPasswordInput = form.confirmPassword;
+
+      function showMessage(msg, type) {
+        messageDiv.textContent = msg;
+        messageDiv.classList.remove('hidden');
+        if (type === 'red') {
+          messageDiv.classList.remove('bg-green-500');
+          messageDiv.classList.add('bg-red-600');
+        } else if (type === 'green') {
+          messageDiv.classList.remove('bg-red-600');
+          messageDiv.classList.add('bg-green-500');
+        }
+     }
+
+     function clearMessage() {
+       messageDiv.textContent = '';
+       messageDiv.classList.add('hidden');
+       messageDiv.classList.remove('bg-red-600', 'bg-green-500');
+      }
+
+      function validatePasswordsLive() {
+        const currentPassword = currentPasswordInput.value.trim();
+        const newPassword = newPasswordInput.value.trim();
+        const confirmPassword = confirmPasswordInput.value.trim();
+
+      if (!currentPassword) {
+        showMessage('Current password is required.', 'red');
+        return false;
+      }
+
+      if (!newPassword) {
+        showMessage('New password is required.', 'red');
+        return false;
+      }
+
+      if (newPassword.length < 8) {
+        showMessage('New password must be at least 8 characters.', 'red');
+        return false;
+      }
+
+      if (!confirmPassword) {
+        showMessage('Please confirm your new password.', 'red');
+        return false;
+      }
+
+      if (newPassword !== confirmPassword) {
+        showMessage('New password and confirmation do not match.', 'red');
+        return false;
+      }
+
+      clearMessage();
+      return true;
+    }
+
+    [currentPasswordInput, newPasswordInput, confirmPasswordInput].forEach(input => {
+      input.addEventListener('input', validatePasswordsLive);
+    });
+
+    form.addEventListener('submit', (e) => {
+      if (!validatePasswordsLive()) {
+        e.preventDefault();
+      }
+    });
+
+});
   </script>
 
 </body>
