@@ -6,9 +6,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-blue-50 font-sans min-h-screen flex">
+<body class="bg-blue-50 font-sans min-h-screen">
+  <div class="flex relative">
+    <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-30 md:hidden"></div>
 
-<aside class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+<aside id="sidebar"
+class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0
+       transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
   <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
     <span class="text-2xl font-bold">👤</span>
   </div>
@@ -33,8 +37,15 @@
   </nav>
 </aside>
 
-<main class="flex-1 p-8 overflow-y-auto max-w-3xl">
-  <h1 class="text-3xl font-extrabold text-blue-900 mb-6">Student Info</h1>
+<main class="flex-1 p-8 overflow-y-auto ml-0 md:ml-64 transition-all duration-300">
+  <div class="flex items-center mb-6">
+  <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-blue-900 text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
+    <span class="block w-6 h-0.5 bg-white mb-1"></span>
+    <span class="block w-6 h-0.5 bg-white mb-1"></span>
+    <span class="block w-6 h-0.5 bg-white"></span>
+  </button>
+  <h1 class="text-3xl font-extrabold text-blue-900 m-0">Student Info</h1>
+  </div>
 
   <div class="bg-white rounded shadow p-6 space-y-6">
     <div>
@@ -86,5 +97,27 @@
   </div>
 </main>
 
+<script>
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('sidebarToggleBtn');
+  const overlay = document.getElementById('overlay');
+
+  toggleBtn.addEventListener('click', () => {
+    sidebar.classList.toggle('-translate-x-full');
+    overlay.classList.toggle('hidden');
+  });
+
+  overlay.addEventListener('click', () => {
+    sidebar.classList.add('-translate-x-full');
+    overlay.classList.add('hidden');
+  });
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth >= 768) {
+      overlay.classList.add('hidden');
+      sidebar.classList.remove('-translate-x-full');
+    }
+  });
+</script>
 </body>
 </html>

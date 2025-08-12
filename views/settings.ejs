@@ -11,9 +11,9 @@
     }
   </style>
 </head>
-<body class="bg-blue-50 font-sans min-h-screen flex">
+<body class="bg-blue-50 font-sans min-h-screen flex relative">
 
-  <aside class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+  <aside id="sidebar" class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
     <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
       <span class="text-2xl font-bold">👤</span>
     </div>
@@ -21,25 +21,35 @@
     <p class="text-sm mb-6"><%= user.Email_Address %></p>
     <nav class="mt-6 text-left w-full flex flex-col h-full">
       <div class="space-y-4 flex-grow">
-      <a href="/supervisorDashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">📊 Dashboard</a>
-      <a href="/students" class="block hover:text-blue-300">👥 Students</a>
-      <a href="/calendar" class="block hover:text-blue-300">🗓️ Calendar</a>
-      <a href="/notifications" class="block hover:text-blue-300">
-      🔔 Notifications
-      <% if (hasUnreadNotifications) { %>
-      <span class="text-red-500 ml-2 font-bold">●</span>
-      <% } %>
-      </a>
-      <a href="/settings" class="block hover:text-blue-300">⚙️ Settings</a>
+        <a href="/supervisorDashboard" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">📊 Dashboard</a>
+        <a href="/students" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">👥 Students</a>
+        <a href="/calendar" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🗓️ Calendar</a>
+        <a href="/notifications" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">
+          🔔 Notifications
+          <% if (hasUnreadNotifications) { %>
+            <span class="text-red-500 ml-2 font-bold">●</span>
+          <% } %>
+        </a>
+        <a href="/settings" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">⚙️ Settings</a>
       </div>
       <div>
-      <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
+        <a href="/logout" class="block hover:text-blue-300 focus:outline-none focus:text-blue-300">🚪 Logout</a>
       </div>
     </nav>
   </aside>
 
-  <main class="flex-1 p-8 overflow-auto max-w-4xl">
-    <h1 class="text-3xl font-extrabold mb-6 text-blue-900">Settings</h1>
+  <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-30 md:hidden"></div>
+
+  <main class="flex-1 p-8 overflow-auto max-w-4xl ml-0 md:ml-64 transition-all duration-300">
+    <div class="flex items-center mb-6">
+      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-blue-900 text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
+        <span class="block w-6 h-0.5 bg-white mb-1"></span>
+        <span class="block w-6 h-0.5 bg-white mb-1"></span>
+        <span class="block w-6 h-0.5 bg-white"></span>
+      </button>
+
+      <h1 class="text-3xl font-extrabold text-blue-900">Settings</h1>
+    </div>
 
     <div class="border-b border-gray-300 mb-6 flex space-x-8 text-gray-600">
       <button id="tab-profile" class="tab-btn tab-active pb-2" type="button">Profile</button>
@@ -57,7 +67,7 @@
           <label class="block text-gray-700 font-medium mb-1">Department</label>
           <input type="text" value="<%= user.Department %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
-        
+
         <div>
           <label class="block text-gray-700 font-medium mb-1">Designation</label>
           <input type="text" value="<%= user.Designation %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
@@ -82,7 +92,6 @@
           <label class="block text-gray-700 font-medium mb-1">Office Address</label>
           <input type="text" value="<%= user.Office_Address %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
-
       </div>
     </section>
 
@@ -130,6 +139,27 @@
   </main>
 
   <script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+    const overlay = document.getElementById('overlay');
+
+    toggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.add('-translate-x-full');
+      overlay.classList.add('hidden');
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 768) {
+        overlay.classList.add('hidden');
+        sidebar.classList.remove('-translate-x-full');
+      }
+    });
+
     const tabs = document.querySelectorAll('.tab-btn');
     const contents = document.querySelectorAll('.tab-content');
 
@@ -212,22 +242,10 @@
       const newPasswordInput = form.newPassword;
       const confirmPasswordInput = form.confirmPassword;
 
-      function showMessage(msg, type) {
-        messageDiv.textContent = msg;
-        messageDiv.classList.remove('hidden');
-        if (type === 'red') {
-          messageDiv.classList.remove('bg-green-500');
-          messageDiv.classList.add('bg-red-600');
-        } else if (type === 'green') {
-          messageDiv.classList.remove('bg-red-600');
-          messageDiv.classList.add('bg-green-500');
-        }
-     }
-
-     function clearMessage() {
-       messageDiv.textContent = '';
-       messageDiv.classList.add('hidden');
-       messageDiv.classList.remove('bg-red-600', 'bg-green-500');
+      function clearMessage() {
+        messageDiv.textContent = '';
+        messageDiv.classList.add('hidden');
+        messageDiv.classList.remove('bg-red-600', 'bg-green-500');
       }
 
       function validatePasswordsLive() {
@@ -235,47 +253,45 @@
         const newPassword = newPasswordInput.value.trim();
         const confirmPassword = confirmPasswordInput.value.trim();
 
-      if (!currentPassword) {
-        showMessage('Current password is required.', 'red');
-        return false;
+        if (!currentPassword) {
+          showMessage('Current password is required.', 'red');
+          return false;
+        }
+
+        if (!newPassword) {
+          showMessage('New password is required.', 'red');
+          return false;
+        }
+
+        if (newPassword.length < 8) {
+          showMessage('New password must be at least 8 characters.', 'red');
+          return false;
+        }
+
+        if (!confirmPassword) {
+          showMessage('Please confirm your new password.', 'red');
+          return false;
+        }
+
+        if (newPassword !== confirmPassword) {
+          showMessage('New password and confirmation do not match.', 'red');
+          return false;
+        }
+
+        clearMessage();
+        return true;
       }
 
-      if (!newPassword) {
-        showMessage('New password is required.', 'red');
-        return false;
-      }
+      [currentPasswordInput, newPasswordInput, confirmPasswordInput].forEach(input => {
+        input.addEventListener('input', validatePasswordsLive);
+      });
 
-      if (newPassword.length < 8) {
-        showMessage('New password must be at least 8 characters.', 'red');
-        return false;
-      }
-
-      if (!confirmPassword) {
-        showMessage('Please confirm your new password.', 'red');
-        return false;
-      }
-
-      if (newPassword !== confirmPassword) {
-        showMessage('New password and confirmation do not match.', 'red');
-        return false;
-      }
-
-      clearMessage();
-      return true;
-    }
-
-    [currentPasswordInput, newPasswordInput, confirmPasswordInput].forEach(input => {
-      input.addEventListener('input', validatePasswordsLive);
+      form.addEventListener('submit', (e) => {
+        if (!validatePasswordsLive()) {
+          e.preventDefault();
+        }
+      });
     });
-
-    form.addEventListener('submit', (e) => {
-      if (!validatePasswordsLive()) {
-        e.preventDefault();
-      }
-    });
-
-});
   </script>
-
 </body>
 </html>

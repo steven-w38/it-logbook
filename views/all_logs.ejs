@@ -6,9 +6,14 @@
   <title>Student Calendar - <%= student.name %></title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-blue-50 font-sans min-h-screen flex">
+<body class="bg-blue-50 font-sans min-h-screen">
+  <div class="flex relative">
 
-  <div class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center">
+    <div id="overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-30 md:hidden"></div>
+
+  <aside id="sidebar"
+  class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0
+         transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
     <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
       <span class="text-2xl font-bold">👤</span>
     </div>
@@ -31,31 +36,40 @@
         <a href="/logout" class="block hover:text-blue-300">🚪 Logout</a>
       </div>
     </nav>
-  </div>
+  </aside>
 
-  <div class="flex-1 p-8 overflow-y-auto">
-    <h1 class="text-2xl font-bold mb-6 text-blue-900">Calendar for <%= student.name %></h1>
 
-    <div class="flex justify-between items-center mb-6">
+  <main class="flex-1 p-4 sm:p-8 overflow-y-auto ml-0 md:ml-64 transition-all duration-300">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="flex items-center text-2xl font-bold text-blue-900">
+      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-blue-900 text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
+        <span class="block w-6 h-0.5 bg-white mb-1"></span>
+        <span class="block w-6 h-0.5 bg-white mb-1"></span>
+        <span class="block w-6 h-0.5 bg-white"></span>
+      </button>
+      Calendar for <%= student.name %></h1>
+    </div>
+
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-6">
       <% if (canGoPrev) { %>
-        <a href="?month=<%= month === 1 ? 12 : month - 1 %>&year=<%= month === 1 ? year - 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">&lt; Prev</a>
+        <a href="?month=<%= month === 1 ? 12 : month - 1 %>&year=<%= month === 1 ? year - 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 text-center">&lt; Prev</a>
       <% } else { %>
         <span class="px-4 py-2 bg-gray-300 text-gray-600 rounded cursor-not-allowed">&lt; Prev</span>
       <% } %>
-      <h2 class="text-xl font-bold"><%= monthName %> <%= year %></h2>
+      <h2 class="text-xl font-bold text-center"><%= monthName %> <%= year %></h2>
 
       <% if (canGoNext) { %>
-        <a href="?month=<%= month === 12 ? 1 : month + 1 %>&year=<%= month === 12 ? year + 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">Next &gt;</a>
+        <a href="?month=<%= month === 12 ? 1 : month + 1 %>&year=<%= month === 12 ? year + 1 : year %>" class="px-4 py-2 bg-blue-900 text-white rounded hover:bg-blue-800 text-center">Next &gt;</a>
       <% } else { %>
         <span class="px-4 py-2 bg-gray-300 text-gray-600 rounded cursor-not-allowed">Next &gt;</span>
       <% } %>
     </div>
 
-    <div class="grid grid-cols-6 gap-2 mb-4 font-semibold text-gray-600">
+    <div class="grid grid-cols-6 gap-1 sm:gap-2 font-semibold text-gray-600 text-xs sm:text-base">
       <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
     </div>
 
-    <div class="grid grid-cols-6 gap-2">
+    <div class="grid grid-cols-6 gap-1 sm:gap-2 text-xs sm:text-base">
     <% calendarDays.forEach(day => { 
          const dayDate = new Date(year, month - 1, day)
          const timezoneOffset = dayDate.getTimezoneOffset() * 60000;
@@ -87,7 +101,31 @@
       <div class="flex items-center"><span class="inline-block w-4 h-4 bg-orange-500 rounded mr-2"></span>Awaiting Remark</div>
       <div class="flex items-center"><span class="inline-block w-4 h-4 bg-red-500 rounded mr-2"></span>No Entry</div>
     </div>
+  </main>
   </div>
+
+  <script>
+    const sidebar = document.getElementById('sidebar');
+    const toggleBtn = document.getElementById('sidebarToggleBtn');
+    const overlay = document.getElementById('overlay');
+
+    toggleBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    });
+
+    overlay.addEventListener('click', () => {
+      sidebar.classList.add('-translate-x-full');
+      overlay.classList.add('hidden');
+    });
+
+    window.addEventListener('resize', () => {
+      if (window.innerWidth >= 768) {
+        overlay.classList.add('hidden');
+        sidebar.classList.remove('-translate-x-full');
+      }
+    });
+  </script>
 
 </body>
 </html>
