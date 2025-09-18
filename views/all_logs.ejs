@@ -70,31 +70,39 @@
     </div>
 
     <div class="grid grid-cols-6 gap-1 sm:gap-2 text-xs sm:text-base">
-    <% calendarDays.forEach(day => { 
-         const dayDate = new Date(year, month - 1, day)
-         const timezoneOffset = dayDate.getTimezoneOffset() * 60000;
-         const localISODate = new Date(dayDate - timezoneOffset).toISOString().slice(0, 10);
-         const dateString = new Date(year, month - 1, day).toISOString().split("T")[0];
-         const status = logsByDate[localISODate];
-         let dayClass = "bg-red-500";
+      <% 
+      let firstDayOfMonth = new Date(year, month - 1, 1).getDay();
+      firstDayOfMonth = (firstDayOfMonth === 0 ? 6 : firstDayOfMonth - 1);
 
-         if (logsByDate[localISODate] === "remarked") {
-           dayClass = "bg-green-500";
-         } else if (logsByDate[localISODate] === "awaiting") {
-           dayClass = "bg-orange-500";
-         }
+      for (let i = 0; i < firstDayOfMonth; i++) { 
+        %>
+        <div></div>
+      <% } %>
 
-         if (new Date(year, month - 1, day) > new Date()) {
-           dayClass = "bg-white";
-         }
-    %>
-      <a href="/student/<%= encodeURIComponent(student['mat number']) %>/logs/<%= localISODate %>">
-        <div class="h-20 flex items-center justify-center rounded hover:scale-105 transition <%= dayClass %>">
-            <%= day %>
-        </div>
-      </a>
-    <% }) %>
-    </div>
+      <% calendarDays.forEach(day => { 
+        const dayDate = new Date(year, month - 1, day);
+        const timezoneOffset = dayDate.getTimezoneOffset() * 60000;
+        const localISODate = new Date(dayDate - timezoneOffset).toISOString().slice(0, 10);
+        const status = logsByDate[localISODate];
+        let dayClass = "bg-red-500";
+
+        if (status === "remarked") {
+          dayClass = "bg-green-500";
+        } else if (status === "awaiting") {
+          dayClass = "bg-orange-500";
+        }
+
+        if (dayDate > new Date()) {
+          dayClass = "bg-white";
+        }
+      %>
+    <a href="/student/<%= encodeURIComponent(student['mat_number']) %>/logs/<%= localISODate %>">
+      <div class="h-20 flex items-center justify-center rounded hover:scale-105 transition <%= dayClass %>">
+        <%= day %>
+      </div>
+    </a>
+  <% }) %>
+</div>
 
     <div class="mt-6 flex space-x-4 text-sm font-semibold">
       <div class="flex items-center"><span class="inline-block w-4 h-4 bg-green-500 rounded mr-2"></span>Remarked</div>

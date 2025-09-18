@@ -63,7 +63,7 @@
         </div>
 
         <section class="bg-white p-4 rounded shadow mt-6">
-          <form action="/student/<%= encodeURIComponent(student['mat number'])%>/logs/<%= date%>/save-remark" method="POST" class="flex flex-col">
+          <form action="/student/<%= encodeURIComponent(student['mat_number'])%>/logs/<%= date%>/save-remark" method="POST" class="flex flex-col">
             <label for="supervisor-remark" class="mb-2 font-semibold text-gray-700">Supervisor Remark</label>
             <textarea id="supervisor-remark" name="remark" rows="6" placeholder="Enter remarks here..."
               class="resize-none p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-orange-500"><%= log.remark || "" %></textarea>

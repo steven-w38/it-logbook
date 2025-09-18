@@ -50,7 +50,7 @@ class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-
   <div class="bg-white rounded shadow p-6 space-y-6">
     <div>
       <label class="block text-gray-700 font-medium mb-1">Mat Number</label>
-      <input type="text" value="<%= student['mat number'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+      <input type="text" value="<%= student['mat_number'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
 
     <div>
@@ -75,7 +75,7 @@ class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-
 
     <div>
       <label class="block text-gray-700 font-medium mb-1">IT Location</label>
-      <input type="text" value="<%= student['it location'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
+      <input type="text" value="<%= student['it_location'] %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
 
     <div>
@@ -83,14 +83,25 @@ class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-
       <input type="email" value="<%= student.email %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
     </div>
 
-    <div>
+     <div>
       <label class="block text-gray-700 font-medium mb-1">IT Duration</label>
-      <input type="text" value="<%= student.it_start_date %> - <%= student.it_end_date %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
-    </div>
-  </div>
+      <% if (student.it_start_date && student.it_end_date) { %>
+        <input type="text" 
+        value="<%= new Date(student.it_start_date).toDateString().slice(4) %> - <%= new Date(student.it_end_date).toDateString().slice(4) %>" 
+        readonly 
+        class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" 
+        />
+        <% } else { %>
+          <input type="text" 
+          value="IT duration not set" 
+          readonly 
+          class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-red-500 focus:outline-none focus:ring-2 focus:ring-orange-500" 
+        />
+      <% } %>
+      </div>
 
   <div class="mt-6">
-    <a href="/student/<%= encodeURIComponent(student['mat number']) %>"
+    <a href="/student/<%= encodeURIComponent(student['mat_number']) %>"
        class="bg-orange-500 hover:bg-orange-600 text-white font-semibold px-6 py-2 rounded transition">
       Back to Student Details
     </a>

@@ -87,16 +87,16 @@
           </thead>
           <tbody>
             <% students.forEach(student => { 
-                 const url = `/student/${encodeURIComponent(student['mat number'])}`;
+                 const url = `/student/${encodeURIComponent(student['mat_number'])}`;
             %>
               <tr 
                 role="row"
                 tabindex="0" 
                 class="border border-transparent hover:bg-gray-50 focus:bg-gray-100 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 cursor-pointer rounded"
                 data-url="<%= url %>"
-                aria-label="View details for <%= student.name %>, Mat Number <%= student['mat number'] %>"
+                aria-label="View details for <%= student.name %>, Mat Number <%= student['mat_number'] %>"
               >
-                <td class="p-3" role="gridcell"><%- highlight(student["mat number"], search) %></td>
+                <td class="p-3" role="gridcell"><%- highlight(student["mat_number"], search) %></td>
                 <td class="p-3" role="gridcell"><%- highlight(student.name, search) %></td>
                 <td class="p-3" role="gridcell"><%- highlight(student.school, search) %></td>
                 <td class="p-3" role="gridcell"><%- highlight(student.department, search) %></td>
