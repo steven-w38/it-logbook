@@ -4,27 +4,76 @@ const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const { createClient } = require('@supabase/supabase-js');
 const nodemailer = require('nodemailer');
 const validator = require('validator');
 const disposable = require('disposable-email-domains');
 const { parsePhoneNumber } = require('libphonenumber-js');
 const { render } = require('ejs');
+const { Pool } = require('pg');
 const { error } = require('console');
 const { register } = require('module');
 
 const app = express();
 const port = process.env.PORT || 3000;
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.API_KEY);
 const OTP_EXPIRY_MINUTES = 10;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1h';
+
+const pool = new Pool({
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD,
+  port: process.env.DB_PORT,
+});
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
+app.use(express.static('public'));
+
+async function reminderMiddleware(req, res, next) {
+  const supervisorEmail = req.dbUser?.Email_Address;
+  if (!supervisorEmail) return next();
+  const client = await pool.connect();
+  try {
+    const studentsRes = await client.query(
+      'SELECT * FROM students WHERE supervisor_email = $1',
+      [supervisorEmail]
+    );
+    const studentsData = studentsRes.rows;
+    const today = new Date();
+    const sevenDaysAgo = new Date(today - 7 * 24 * 60 * 60 * 1000).toISOString();
+    for (const student of studentsData) {
+      const matNumber = student["mat_number"];
+      const logsRes = await client.query(
+        'SELECT remark, date FROM logs WHERE "mat_number" = $1 AND date >= $2',
+        [matNumber, sevenDaysAgo]
+      );
+      const logs = logsRes.rows;
+      if (logs.length > 0) {
+        const hasRemarked = logs.some(log => log.remark && log.remark.trim() !== "");
+        if (!hasRemarked) {
+          const existingRes = await client.query(
+            'SELECT id FROM notifications WHERE supervisor_email = $1 AND type = $2 AND student_mat_number = $3 AND created_at >= $4',
+            [supervisorEmail, "unremarked_log", matNumber, sevenDaysAgo]
+          );
+          if (existingRes.rows.length === 0) {
+            const message = `Reminder: No logs have been remarked for student ${matNumber} in the past 7 days.`;
+            await client.query(
+              `INSERT INTO notifications (supervisor_email, type, message, student_mat_number, read) VALUES ($1, $2, $3, $4, false)`,
+              [supervisorEmail, "unremarked_log", message, matNumber]
+            );
+          }
+        }
+      }
+    }
+    next();
+  } finally {
+    client.release();
+  }
+}
 
 function handleError(res, view, error, status = 500) {
   console.error(error);
@@ -42,16 +91,33 @@ function authenticateToken(req, res, next) {
 }
 
 async function fetchUserJWT(req, res, next) {
-  const email = req.tokenData?.email;
-  if (!email) return res.status(400).send('Missing user email.');
-  const { data, error } = await supabase
-    .from('it_supervisor')
-    .select('*')
-    .eq('Email_Address', email)
-    .single();
-  if (error || !data) return res.status(400).send('User not found');
-  req.dbUser = data;
-  next();
+  const email = req.tokenData?.email?.trim().toLowerCase();
+  if (!email) return res.status(400).send("Missing user email.");
+
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      'SELECT * FROM it_supervisor WHERE LOWER("Email_Address") = $1',
+      [email]
+    );
+
+    if (!rows[0]) {
+      client.release();
+      return res.status(400).send("User not found.");
+    }
+
+    req.dbUser = {
+      ...rows[0],
+      Email_Address: rows[0].Email_Address.trim().toLowerCase(),
+    };
+
+    client.release();
+    next();
+  } catch (err) {
+    client.release();
+    console.error("Error in fetchUserJWT:", err);
+    res.status(500).send("Internal server error.");
+  }
 }
 
 function generateCalendarDays(year, month) {
@@ -83,64 +149,19 @@ async function fetchUnreadNotifications(req, res, next) {
   if (!email) {
     res.locals.hasUnreadNotifications = false;
     return next();
-  }  
-
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  
-  const { data:unread, error } = await supabase.from('notifications').select('id').eq('supervisor_email', email).eq('read', false).gte('created_at', sevenDaysAgo.toISOString());
-  
-  if (error) {
-    console.error('Error fetching notifications:', error);
-    return res.status(500).send('Failed to fetch notifications.');
   }
-  
-  res.locals.hasUnreadNotifications = unread.length > 0;
-  next();
-}
-
-async function reminderMiddleware(req, res, next) {
-  const supervisorEmail = req.dbUser?.Email_Address;
-  if (!supervisorEmail) return next();
-
-  const { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", supervisorEmail);
-
-  if (studentsError) {
-    console.error("Failed to fetch students for log reminder check:", studentsError);
-    return next();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `SELECT id FROM notifications WHERE supervisor_email = $1 AND read = false AND created_at >= $2`,
+      [email, sevenDaysAgo]
+    );
+    res.locals.hasUnreadNotifications = rows.length > 0;
+    next();
+  } finally {
+    client.release();
   }
-
-  const today = new Date();
-  const sevenDaysAgo = new Date(today);
-  sevenDaysAgo.setDate(today.getDate() - 7);
-
-  for (const student of studentsData) {
-    const matNumber = student["mat number"];
-
-    const { data: logs, error: logsError } = await supabase.from("logs").select("remark, date").eq("mat number", matNumber).gte("date", sevenDaysAgo.toISOString());
-
-    if (logsError|| !logs || logs.length === 0) continue;
-
-    const hasRemarked = logs.some(log => log.remark && log.remark.trim() !== "");
-
-    if (!hasRemarked) {
-      const { data: existing } = await supabase.from("notifications").select("id").eq("supervisor_email", supervisorEmail).eq("type", "unremarked_log").eq("student_mat_number", matNumber).gte("created_at", sevenDaysAgo.toISOString());
-
-      if (!existing || existing.length === 0) {
-        const message = `Reminder: No logs have been remarked for student ${matNumber} in the past 7 days.`;
-
-        await supabase.from("notifications").insert([{
-          supervisor_email: supervisorEmail,
-          type: "unremarked_log",
-          message,
-          student_mat_number: matNumber,
-          read: false
-        }]);
-      }
-    }
-  }
-
-  next();
 }
 
 app.get('/', (req, res) => {
@@ -156,124 +177,184 @@ app.post('/login', async (req, res) => {
     return res.render('login', { error: 'Email and password required.', success: null });
   }
 
-  const { data: users, error } = await supabase
-    .from('it_supervisor')
-    .select('*')
-    .eq('Email_Address', email);
+  const client = await pool.connect();
+  let users;
+  let error = null;
 
-  if (error || !users || users.length !== 1) {
-    return res.render('login', { error: 'Invalid email or password.', success: null });
+  try {
+    const result = await client.query(
+      'SELECT * FROM it_supervisor WHERE "Email_Address" = $1',
+      [email]
+    );
+    users = result.rows;
+
+    if (!users || users.length !== 1) {
+      return res.render('login', { error: 'Invalid email or password.', success: null });
+    }
+
+    const user = users[0];
+
+    const validPass = await bcrypt.compare(password, user.password);
+    if (!validPass) {
+      return res.render('login', { error: 'Invalid email or password.', success: null });
+    }
+
+    const token = jwt.sign(
+      { email: user.Email_Address, name: user.Name },
+      process.env.JWT_SECRET,
+      { expiresIn: JWT_EXPIRY }
+    );
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 60 * 60 * 1000,
+      sameSite: 'strict',
+    });
+
+    res.redirect('/supervisorDashboard');
+
+  } catch (err) {
+    console.error('Database error during login:', err);
+    return res.render('login', { error: 'An unexpected error occurred.', success: null });
+  } finally {
+    client.release();
   }
-
-  const user = users[0];
-
-  const validPass = await bcrypt.compare(password, user.password);
-  if (!validPass) {
-    return res.render('login', { error: 'Invalid email or password.', success: null });
-  }
-
-  const token = jwt.sign(
-    { email: user.Email_Address, name: user.Name },
-    process.env.JWT_SECRET,
-    { expiresIn: JWT_EXPIRY }
-  );
-
-  res.cookie('token', token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 60 * 60 * 1000,
-    sameSite: 'strict',
-  });
-
-  res.redirect('/supervisorDashboard');
 });
 
 app.get('/supervisorDashboard', authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
+  try {
+    const email = req.dbUser.Email_Address;
 
-  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", req.dbUser.Email_Address);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('👤 req.dbUser:', req.dbUser);
+    }
 
-  if (studentsError) {
-    console.error('Error fetching students:', studentsError);
+    // Fetch students
+    const studentsResult = await pool.query(
+      'SELECT * FROM students WHERE LOWER(supervisor_email) = LOWER($1)',
+      [email]
+    );
+    const studentsData = studentsResult.rows || [];
+    const studentCount = studentsData.length;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('📚 Students Data for', email, ':', studentsData);
+    }
+
+    // Fetch notifications
+    const notificationsResult = await pool.query(
+      'SELECT * FROM notifications WHERE LOWER(supervisor_email) = LOWER($1) ORDER BY created_at DESC',
+      [email]
+    );
+    const notifications = notificationsResult.rows || [];
+    const notificationCount = notifications.length;
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔔 Notifications for', email, ':', notifications);
+    }
+
+    res.render('supervisorDashboard', {
+      user: req.dbUser,
+      students: studentsData,
+      studentCount,
+      notificationCount,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications,
+    });
+
+  } catch (error) {
+    console.error('Database error:', error);
     return res.status(500).render('supervisorDashboard', {
       user: req.dbUser,
-      students:[],
+      students: [],
       studentCount: 0,
       notificationCount: 0,
       hasUnreadNotifications: res.locals.hasUnreadNotifications,
-      error: "Unable to fetch students."
+      error: 'An unexpected error occurred.',
     });
   }
-  const studentCount = studentsData.length
-
-  const {data: notifications, error: notificationsError} = await supabase.from("notifications").select("*").eq("supervisor_email", req.dbUser.Email_Address);
-  
-  if (notificationsError) {
-    console.error('Error fetching notifications:', notificationsError);
-    return res.status(500).render('supervisorDashboard', {
-      user: req.dbUser,
-      students:[],
-      studentCount: 0,
-      notificationCount: 0,
-      hasUnreadNotifications: res.locals.hasUnreadNotifications,
-      error: "Unable to fetch notifications."
-    });
-  }
-  const notificationCount = notifications.length;
-
-  res.render("supervisorDashboard",{
-    user: req.dbUser,
-    students:studentsData,
-    studentCount,
-    notificationCount,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
 });
 
 app.get("/students", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const search = (req.query.search || "").trim().toLowerCase();
+  const client = await pool.connect();
+  try {
+    const email = req.dbUser.Email_Address;
 
-  let { data: studentsData, error: studentsError } = await supabase.from("students").select("*").eq("supervisor_email", req.dbUser.Email_Address);
+    const studentsResult = await client.query(
+      'SELECT * FROM students WHERE supervisor_email = $1',
+      [email]
+    );
+    const studentsData = studentsResult.rows;
 
-  if (studentsError) {
-    console.error('Error fetching students:', studentsError);
+    if (!studentsData) {
+      console.error('Error fetching students.');
+      return res.status(500).render('students', {
+        user: req.dbUser,
+        students: [],
+        search: '',
+        hasUnreadNotifications: res.locals.hasUnreadNotifications,
+        error: "Unable to fetch students."
+      });
+    }
+
+    res.render("students", {
+      user: req.dbUser,
+      students: studentsData,
+      search,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications,
+    });
+
+  } catch (error) {
+    console.error('Database error:', error);
     return res.status(500).render('students', {
       user: req.dbUser,
       students: [],
       search: '',
       hasUnreadNotifications: res.locals.hasUnreadNotifications,
-      error: "Unable to fetch students."
+      error: "An unexpected error occurred."
     });
+  } finally {
+    client.release();
   }
-
-  res.render("students", {
-    user: req.dbUser,
-    students: studentsData,
-    search,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
 });
 
 app.get("/student/:matNumber", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const matNumber = req.params.matNumber;
 
-  const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
-  if (studentError || !student) {
-    return res.status(404).send("Student not found.");
+  try {
+    // Fetch student
+    const studentResult = await pool.query(
+      `SELECT * FROM students WHERE "mat_number" = $1 LIMIT 1`,
+      [matNumber]
+    );
+
+    if (studentResult.rowCount === 0) {
+      return res.status(404).send("Student not found.");
+    }
+    const student = studentResult.rows[0];
+
+    // Fetch logs
+    const logsResult = await pool.query(
+      `SELECT * FROM logs WHERE "mat_number" = $1 ORDER BY date DESC`,
+      [matNumber]
+    );
+    const logs = logsResult.rows;
+    const latestLog = logs.length > 0 ? logs[0] : null;
+
+    res.render("student_details", {
+      user: req.dbUser,
+      student,
+      logs,
+      latestLog,
+      success: req.query.success,
+      error: req.query.error,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications
+    });
+  } catch (err) {
+    console.error("Error fetching student details:", err);
+    res.status(500).send("Internal server error.");
   }
-
-  const { data: logs, error: logsError } = await supabase
-    .from("logs").select("*").eq("mat number", matNumber).order("date", { ascending: false });
-  const latestLog = logs?.[0] || null;
-
-  res.render("student_details", {
-    user: req.dbUser,
-    student,
-    logs,
-    latestLog,
-    success: req.query.success,
-    error: req.query.error,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
 });
 
 app.post("/student/:matNumber/save-remark", authenticateToken, fetchUserJWT, async (req, res) => {
@@ -284,156 +365,297 @@ app.post("/student/:matNumber/save-remark", authenticateToken, fetchUserJWT, asy
     return res.status(400).send("Remark cannot be empty.");
   }
 
-  const { data: logs, error: logsError } = await supabase.from("logs").select("*").eq("mat number", matNumber).order("date", { ascending: false });
-  if (logsError || !logs?.length) {
-    return res.status(404).send("No log found for this student.");
-  }
+  const client = await pool.connect();
+  try {
+    // Fetch logs for the student, latest first
+    const logsResult = await client.query(
+      `SELECT * 
+       FROM logs 
+       WHERE "mat_number" = $1 
+       ORDER BY date DESC 
+       LIMIT 1`,
+      [matNumber]
+    );
 
-  const latestLog = logs[0];
-  const { error: updateError } = await supabase.from("logs").update({ remark }).eq("id", latestLog.id);
-  if (updateError) {
-    return res.status(500).send("Error updating remark.");
-  }
+    if (logsResult.rows.length === 0) {
+      return res.status(404).send("No log found for this student.");
+    }
 
-  res.redirect(`/student/${matNumber}?success=Remark saved successfully!`);
+    const latestLog = logsResult.rows[0];
+
+    // Update remark for latest log
+    const updateResult = await client.query(
+      `UPDATE logs 
+       SET remark = $1 
+       WHERE id = $2`,
+      [remark, latestLog.id]
+    );
+
+    if (updateResult.rowCount === 0) {
+      return res.status(500).send("Error updating remark.");
+    }
+
+    res.redirect(`/student/${matNumber}?success=Remark saved successfully!`);
+  } catch (err) {
+    console.error("Error updating remark:", err);
+    res.status(500).send("Error updating remark.");
+  } finally {
+    client.release();
+  }
 });
 
-app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware,  async (req, res) => {
-  const matNumber = req.params.matNumber;
+app.get("/student/:matNumber/logs", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
+    const matNumber = req.params.matNumber;
+    const client = await pool.connect();
 
-  const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
+    try {
+      const studentResult = await client.query(
+        `SELECT * 
+         FROM students 
+         WHERE mat_number = $1 
+         LIMIT 1`,
+        [matNumber]
+      );
 
-  if (studentError || !student) {
-    return res.status(404).send("Student not found.");
-  }
+      if (studentResult.rows.length === 0) {
+        return res.status(404).send("Student not found.");
+      }
 
-  const { data: logs, error: logsError } = await supabase.from("logs").select("*").eq("mat number", matNumber);
+      const student = studentResult.rows[0];
 
-  if (logsError) {
-    return res.status(500).send("Error fetching logs.");
-  }
+      const logsResult = await client.query(
+        `SELECT * 
+         FROM logs 
+         WHERE mat_number = $1`,
+        [matNumber]
+      );
 
-  const logsByDate = {};
-  logs.forEach(log => {
-    const dateString = new Date(log.date).toISOString().split("T")[0];
-    if (log.remark && log.remark.trim() !== "") {
-      logsByDate[dateString] = "remarked";
-    } else {
-      logsByDate[dateString] = "awaiting";
+      const logs = logsResult.rows;
+
+      const logsByDate = {};
+      logs.forEach((log) => {
+        const dateString = new Date(log.date).toISOString().split("T")[0];
+        if (log.remark && log.remark.trim() !== "") {
+          logsByDate[dateString] = "remarked";
+        } else {
+          logsByDate[dateString] = "awaiting";
+        }
+      });
+
+      const itStart = new Date(student.it_start_date);
+      const itEnd = new Date(student.it_end_date);
+
+      const year = parseInt(req.query.year) || new Date().getFullYear();
+      const month = parseInt(req.query.month) || new Date().getMonth() + 1;
+
+      const currentMonthDate = new Date(year, month - 1);
+      if (
+        currentMonthDate <
+          new Date(itStart.getFullYear(), itStart.getMonth()) ||
+        currentMonthDate > new Date(itEnd.getFullYear(), itEnd.getMonth())
+      ) {
+        return res.status(403).send("Month outside IT duration.");
+      }
+
+      const firstDay = new Date(year, month - 1, 1);
+      const lastDay = new Date(year, month, 0);
+      const totalDays = lastDay.getDate();
+      const calendarDays = [];
+
+      for (let day = 1; day <= totalDays; day++) {
+        const date = new Date(year, month - 1, day);
+        if (date.getDay() !== 0) {
+          calendarDays.push(day);
+        }
+      }
+
+      const canGoPrev =
+        new Date(year, month - 2) >=
+        new Date(itStart.getFullYear(), itStart.getMonth());
+      const canGoNext =
+        new Date(year, month) <= new Date(itEnd.getFullYear(), itEnd.getMonth());
+
+      res.render("all_logs", {
+        user: req.dbUser,
+        student,
+        year,
+        month,
+        monthName: new Date(year, month - 1).toLocaleString("default", {
+          month: "long",
+        }),
+        calendarDays,
+        logsByDate,
+        canGoPrev,
+        canGoNext,
+        hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      });
+    } catch (err) {
+      console.error("Error fetching student logs:", err);
+      res.status(500).send("Error fetching logs.");
+    } finally {
+      client.release();
     }
-  });
-
-  const itStart = new Date (student.it_start_date);
-  const itEnd = new Date(student.it_end_date);
-
-  const year = parseInt(req.query.year) || new Date().getFullYear();
-  const month = parseInt(req.query.month) || new Date().getMonth() + 1;
-
-  const currentMonthDate = new Date(year, month - 1);
-  if (currentMonthDate < new Date(itStart.getFullYear(), itStart.getMonth()) ||
-      currentMonthDate > new Date(itEnd.getFullYear(), itEnd.getMonth())) {
-    return res.status(403).send("Month outside IT duration.");
   }
-
-  const firstDay = new Date(year, month - 1, 1);
-  const lastDay = new Date(year, month, 0);
-  const totalDays = lastDay.getDate();
-  const calendarDays = [];
-
-  for (let day = 1; day <= totalDays; day++) {
-    const date = new Date(year, month - 1, day);
-    if (date.getDay() !== 0) {
-      calendarDays.push(day);
-    }
-  }
-
-  const canGoPrev = new Date(year, month - 2) >= new Date(itStart.getFullYear(), itStart.getMonth());
-  const canGoNext = new Date(year, month) <= new Date(itEnd.getFullYear(), itEnd.getMonth());
-
-  res.render("all_logs", {
-    user: req.dbUser,
-    student,
-    year,
-    month,
-    monthName: new Date(year, month - 1).toLocaleString("default", { month: "long" }),
-    calendarDays,
-    logsByDate,
-    canGoPrev,
-    canGoNext,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
-});
+);
 
 app.get("/student/:matNumber/logs/:date", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
-  const { matNumber, date } = req.params;
+    const { matNumber, date } = req.params;
+    const client = await pool.connect();
 
-  const normalizedDate = new Date(date).toISOString().split("T")[0];
-  const startOfDay = new Date(normalizedDate);
-  const endOfDay = new Date(startOfDay);
-  endOfDay.setDate(endOfDay.getDate() + 1);
+    try {
+      const normalizedDate = new Date(date).toISOString().split("T")[0];
+      const startOfDay = new Date(normalizedDate);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
 
-  const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
-  if (studentError || !student) {
-    return res.status(404).send("Student not found.");
+      const studentResult = await client.query(
+        `SELECT * 
+         FROM students 
+         WHERE mat_number = $1 
+         LIMIT 1`,
+        [matNumber]
+      );
+
+      if (studentResult.rows.length === 0) {
+        return res.status(404).send("Student not found.");
+      }
+
+      const student = studentResult.rows[0];
+
+      const logResult = await client.query(
+        `SELECT * 
+         FROM logs 
+         WHERE mat_number = $1 
+           AND date >= $2 
+           AND date < $3
+         LIMIT 1`,
+        [matNumber, startOfDay.toISOString(), endOfDay.toISOString()]
+      );
+
+      const logData = logResult.rows[0] || null;
+
+      return res.render("logs_for_date", {
+        user: req.dbUser,
+        student,
+        log: logData,
+        date: normalizedDate,
+        success: req.query.success,
+        error: req.query.error,
+        hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      });
+    } catch (err) {
+      console.error("Error fetching log for date:", err);
+      res.status(500).send("Error fetching log.");
+    } finally {
+      client.release();
+    }
   }
-
-  const { data: logData, error: logError } = await supabase.from("logs").select("*").eq("mat number", matNumber).gte("date", startOfDay.toISOString()).lt("date", endOfDay.toISOString()).single();
-
-  return res.render("logs_for_date", {
-    user: req.dbUser,
-    student,
-    log: logData,
-    date: normalizedDate,
-    success: req.query.success,
-    error: req.query.error,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
-});
+);
 
 app.post("/student/:matNumber/logs/:date/save-remark", authenticateToken, fetchUserJWT, async (req, res) => {
-  const { matNumber, date } = req.params;
-  const { remark } = req.body;
+    const { matNumber, date } = req.params;
+    const { remark } = req.body;
+    const client = await pool.connect();
 
-  const cleanRemark = (remark || "").trim();
-  if (!cleanRemark) {
-  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Remark cannot be empty.")}`);
+    try {
+      const cleanRemark = (remark || "").trim();
+      if (!cleanRemark) {
+        return res.redirect(
+          `/student/${matNumber}/logs/${date}?error=${encodeURIComponent(
+            "Remark cannot be empty."
+          )}`
+        );
+      }
+
+      const startOfDay = new Date(`${date}T00:00:00Z`).toISOString();
+      const endOfDay = new Date(`${date}T23:59:59Z`).toISOString();
+
+      const logResult = await client.query(
+        `SELECT * 
+         FROM logs 
+         WHERE mat_number = $1 
+           AND date >= $2 
+           AND date <= $3
+         LIMIT 1`,
+        [matNumber.trim(), startOfDay, endOfDay]
+      );
+
+      const log = logResult.rows[0] || null;
+
+      if (!log) {
+        console.error("Log fetch error: not found for student/date");
+        return res.redirect(
+          `/student/${matNumber}/logs/${date}?error=${encodeURIComponent(
+            "Log not found."
+          )}`
+        );
+      }
+
+      const updateResult = await client.query(
+        `UPDATE logs 
+         SET remark = $1 
+         WHERE id = $2`,
+        [cleanRemark, log.id]
+      );
+
+      if (updateResult.rowCount === 0) {
+        return res.redirect(
+          `/student/${matNumber}/logs/${date}?error=${encodeURIComponent(
+            "Error updating remark."
+          )}`
+        );
+      }
+
+      res.redirect(
+        `/student/${matNumber}/logs/${date}?success=${encodeURIComponent(
+          "Remark saved successfully!"
+        )}`
+      );
+    } catch (err) {
+      console.error("Error updating remark:", err);
+      res.redirect(
+        `/student/${matNumber}/logs/${date}?error=${encodeURIComponent(
+          "Error updating remark."
+        )}`
+      );
+    } finally {
+      client.release();
+    }
   }
-
-  const startOfDay = new Date(`${date}T00:00:00Z`).toISOString();
-  const endOfDay = new Date(`${date}T23:59:59Z`).toISOString();
-
-  const { data: logs, error: logError } = await supabase.from("logs").select("*").eq("mat number", matNumber.trim()).gte("date", startOfDay).lte("date", endOfDay);
-
-  const log = logs && logs.length > 0 ? logs[0] : null;
-
-  if (logError || !log) {
-  console.error("Log fetch error:", logError);
-  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Log not found.")}`);
-  }
-
-  const { error: updateError } = await supabase.from("logs").update({ remark: cleanRemark }).eq("id", log.id);
-
-  if (updateError) {
-  return res.redirect(`/student/${matNumber}/logs/${date}?error=${encodeURIComponent("Error updating remark.")}`);
-}
-
-  res.redirect(`/student/${matNumber}/logs/${date}?success=${encodeURIComponent("Remark saved successfully!")}`);
-});
+);
 
 app.get("/student/:matNumber/info", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
-  const matNumber = req.params.matNumber;
+    const matNumber = req.params.matNumber;
+    const client = await pool.connect();
 
-  const { data: student, error: studentError } = await supabase.from("students").select("*").eq("mat number", matNumber).single();
-  if (studentError || !student) {
-    return res.status(404).send("Student not found.");
+    try {
+      const studentResult = await client.query(
+        `SELECT * 
+         FROM students 
+         WHERE mat_number = $1 
+         LIMIT 1`,
+        [matNumber]
+      );
+
+      if (studentResult.rows.length === 0) {
+        return res.status(404).send("Student not found.");
+      }
+
+      const student = studentResult.rows[0];
+
+      res.render("student_info", {
+        user: req.dbUser,
+        student,
+        hasUnreadNotifications: res.locals.hasUnreadNotifications,
+      });
+    } catch (err) {
+      console.error("Error fetching student info:", err);
+      res.status(500).send("Error fetching student info.");
+    } finally {
+      client.release();
+    }
   }
-
-  res.render("student_info", {
-    user: req.dbUser,
-    student,
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
-});
+);
 
 app.get("/calendar", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
   const { month, year } = req.query;
@@ -457,37 +679,79 @@ app.get("/calendar", authenticateToken, fetchUserJWT, fetchUnreadNotifications, 
   });
 });
 
-app.get("/notifications", authenticateToken, fetchUserJWT, fetchUnreadNotifications, async (req, res) => {
-  const supervisorEmail = req.dbUser.Email_Address;
+app.get("/notifications", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
+  const supervisorEmail = req.dbUser.Email_Address.trim().toLowerCase();
+  const client = await pool.connect();
 
-  const { data: notifications, error } = await supabase.from("notifications").select("*").eq("supervisor_email", supervisorEmail).order("created_at", { ascending: false });
-  
-  if (error) return res.status(500).send("Failed to load notifications."); 
-  
-  res.render("notifications", {
-    user: req.dbUser,
-    notifications,  
-    hasUnreadNotifications: res.locals.hasUnreadNotifications
-  });
-});  
+  try {
+    const result = await client.query(
+      `SELECT * FROM notifications 
+       WHERE LOWER(TRIM(supervisor_email)) = $1 
+       ORDER BY created_at DESC`,
+      [supervisorEmail]
+    );
+
+    res.render("notifications", {
+      user: req.dbUser,
+      notifications: result.rows,
+      hasUnreadNotifications: res.locals.hasUnreadNotifications
+    });
+  } catch (err) {
+    console.error("Failed to load notifications:", err);
+    res.status(500).send("Failed to load notifications.");
+  } finally {
+    client.release();
+  }
+});
 
 app.delete("/notifications/:id", authenticateToken, fetchUserJWT, async (req, res) => {
   const { id } = req.params;
-  const supervisorEmail = req.dbUser.Email_Address;
+  const supervisorEmail = req.dbUser.Email_Address.trim().toLowerCase();
+  const client = await pool.connect();
 
-  const { error } = await supabase.from("notifications").delete().eq("id", id).eq("supervisor_email", supervisorEmail);
+  try {
+    const result = await client.query(
+      `DELETE FROM notifications 
+       WHERE id = $1 AND LOWER(TRIM(supervisor_email)) = $2
+       RETURNING id`,
+      [id, supervisorEmail]
+    );
 
-  if (error) return res.status(500).json({ success: false });
-  return res.json({ success: true });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: "Notification not found or not authorized." });
+    }
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("Failed to delete notification:", err);
+    return res.status(500).json({ success: false });
+  } finally {
+    client.release();
+  }
 });
 
 app.delete("/notifications", authenticateToken, fetchUserJWT, async (req, res) => {
-  const supervisorEmail = req.dbUser.Email_Address;
+  const supervisorEmail = req.dbUser.Email_Address.trim().toLowerCase();
+  const client = await pool.connect();
 
-  const { error } = await supabase.from("notifications").delete().eq("supervisor_email", supervisorEmail);
+  try {
+    const result = await client.query(
+      `DELETE FROM notifications
+      WHERE LOWER(TRIM(supervisor_email)) = $1
+      RETURNING id`,
+      [supervisorEmail]
+    );
 
-  if (error) return res.status(500).json({ success: false });
-  return res.json({ success: true });
+    return res.json({ 
+      success: true, 
+      deletedCount: result.rowCount 
+    });
+  } catch (err) {
+    console.error("Failed to delete notifications:", err);
+    return res.status(500).json({ success: false });
+  } finally {
+    client.release();
+  }
 });
 
 app.get("/settings", authenticateToken, fetchUserJWT, fetchUnreadNotifications, reminderMiddleware, async (req, res) => {
@@ -500,34 +764,59 @@ app.get("/settings", authenticateToken, fetchUserJWT, fetchUnreadNotifications, 
 });
 
 app.post("/change-password", authenticateToken, fetchUserJWT, async (req, res) => {
-  const { email, currentPassword, newPassword, confirmPassword } = req.body;
+  let { email, currentPassword, newPassword, confirmPassword } = req.body;
+  email = email.trim().toLowerCase();
 
-  const { data: user, error } = await supabase.from("it_supervisor").select("*").eq("Email_Address", email).single();
-  if (error || !user) {
-    return res.render("settings", { user: req.dbUser, error: "User not found." });
-  }
+  try {
+    const client = await pool.connect();
 
-  const passwordMatch = await bcrypt.compare(currentPassword, user.password);
-  if (!passwordMatch) {
-    return res.render("settings", { user: req.dbUser, error: "Current password is incorrect." });
-  }
-  if (newPassword.length < 8) {
-    return res.render("settings", { user: req.dbUser, error: "New password must be at least 8 characters long." });
-  }
-  if (!isStrongPassword(newPassword)) {
-    return res.render("settings", { user: req.dbUser, error: "Password must contain an uppercase, a lowercase, and a number." });
-  }
-  if (newPassword !== confirmPassword) {
-    return res.render("settings", { user: req.dbUser, error: "New passwords do not match." });
-  }
+    const { rows } = await client.query(
+      'SELECT * FROM it_supervisor WHERE LOWER("Email_Address") = $1',
+      [email]
+    );
 
-  const hashedPassword = await bcrypt.hash(newPassword, 12);
-  const { error: updateError } = await supabase.from("it_supervisor").update({ password: hashedPassword }).eq("Email_Address", email);
-  if (updateError) {
-    return res.render("settings", { user: req.dbUser, error: "Error updating password." });
-  }
+    const user = rows[0];
+    if (!user) {
+      client.release();
+      return res.render("settings", { 
+        user: req.dbUser, 
+        error: "User not found.",
+        hasUnreadNotifications: res.locals.hasUnreadNotifications
+      });
+    }
 
-  res.render("settings", { user: req.dbUser, success: "Password updated successfully!" });
+    const passwordMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!passwordMatch) {
+      client.release();
+      return res.render("settings", { user: req.dbUser, error: "Current password is incorrect.", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+    }
+
+    if (newPassword.length < 8) {
+      client.release();
+      return res.render("settings", { user: req.dbUser, error: "New password must be at least 8 characters long.", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+    }
+    if (!isStrongPassword(newPassword)) {
+      client.release();
+      return res.render("settings", { user: req.dbUser, error: "Password must contain an uppercase, a lowercase, and a number.", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+    }
+    if (newPassword !== confirmPassword) {
+      client.release();
+      return res.render("settings", { user: req.dbUser, error: "New passwords do not match.", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+    await client.query(
+      'UPDATE it_supervisor SET password = $1 WHERE LOWER("Email_Address") = $2',
+      [hashedPassword, email]
+    );
+
+    client.release();
+    res.render("settings", { user: req.dbUser, success: "Password updated successfully!", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+
+  } catch (err) {
+    console.error("Error updating password:", err);
+    res.render("settings", { user: req.dbUser, error: "Error updating password.", hasUnreadNotifications: res.locals.hasUnreadNotifications });
+  }
 });
 
 app.get("/logout", (req, res) => {
@@ -535,6 +824,7 @@ app.get("/logout", (req, res) => {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
+    path: "/",
   });
   res.redirect("/");
 });
@@ -551,36 +841,47 @@ app.post('/submit-supervisor', async (req, res) => {
     return res.render('supervisorForm', { error: 'Disposable emails are not allowed.' });
   }
 
-  const { data: supervisor, error: supervisorError } = await supabase
-  .from('it_supervisor')
-  .select('*')
-  .eq('Email_Address', email_address)
-  .single();
-
-  if (supervisorError || !supervisor) {
-  console.error("Supervisor email fetch error:", supervisorError);
-  return res.render('supervisorForm', { error: 'Email not found in supervisor records.' });
-  }
-
-  if (supervisor.password) {
-    console.error("Supervisor already has an account:", supervisor);
-    return res.render('supervisorForm', { error: 'Account already exists. Please log in.' });
-  }
-
+  const client = await pool.connect();
   try {
+    // Fetch supervisor
+    const { rows: supervisors } = await client.query(
+      `SELECT * FROM it_supervisor WHERE "Email_Address" = $1`,
+      [email_address]
+    );
+
+    if (supervisors.length === 0) {
+      console.error("Supervisor email fetch error: not found");
+      return res.render('supervisorForm', { error: 'Email not found in supervisor records.' });
+    }
+
+    const supervisor = supervisors[0];
+
+    if (supervisor.password) {
+      console.error("Supervisor already has an account:", supervisor);
+      return res.render('supervisorForm', { error: 'Account already exists. Please log in.' });
+    }
+
+    // Generate OTP + expiration using DB time
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    const { data: nowData, error: nowError } = await supabase.rpc('get_current_timestamp');
-    if (nowError) return handleError(res, 'supervisorForm', 'Could not verify server time.');
 
-    const expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    const { rows: nowRows } = await client.query(`SELECT NOW()`);
+    if (nowRows.length === 0) {
+      return handleError(res, 'supervisorForm', 'Could not verify server time.');
+    }
 
-    await supabase.from('OTPs').upsert([{
-      email: email_address,
-      otp,
-      expires_at: expires_at.toISOString(),
-      temp_data: { email_address }
-    }]);
+    const serverNow = nowRows[0].now;
+    const expires_at = new Date(new Date(serverNow).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
+    // Upsert OTP
+    await client.query(
+      `INSERT INTO "OTPs" (email, otp, expires_at, temp_data)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email)
+       DO UPDATE SET otp = $2, expires_at = $3, temp_data = $4`,
+      [email_address, otp, expires_at.toISOString(), JSON.stringify({ email_address })]
+    );
+
+    // Send OTP email
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
@@ -595,7 +896,10 @@ app.post('/submit-supervisor', async (req, res) => {
 
     res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}`);
   } catch (error) {
+    console.error("Error in /submit-supervisor:", error);
     handleError(res, 'supervisorForm', 'Failed to send OTP.', 500);
+  } finally {
+    client.release();
   }
 });
 
@@ -614,25 +918,31 @@ app.post('/verify-otp', async (req, res) => {
 
   const enteredOtp = (req.body.otp || []).join('').trim();
 
-  const { data, error } = await supabase
-    .from('OTPs')
-    .select('*')
-    .eq('email', email)
-    .single();
+  try {
+    const query = 
+      `SELECT * FROM "OTPs" 
+      WHERE email = $1
+      LIMIT 1`;
 
-  if (error || !data) {
-    return res.render('verifyOtp', { email, error: 'OTP not found.', mode });
-  }
+    const { rows } = await pool.query(query, [email]);
+    const data = rows[0];
 
-  if (Date.now() > new Date(data.expires_at)) {
+    if (!data) {
+      return res.render('verifyOtp', { email, error: 'No OTP found for this email.', mode });
+    }
+
+    if (Date.now() > new Date(data.expires_at).getTime()) {
     return res.render('verifyOtp', { email, error: 'OTP expired.', mode });
-  }
+    }
 
-  if (data.otp !== enteredOtp) {
+    if (data.otp !== enteredOtp) {
     return res.render('verifyOtp', { email, error: 'Incorrect OTP.', mode });
-  }
+    }
 
   res.redirect(`/create-password?email=${encodeURIComponent(email)}&mode=${mode}`);
+} catch (error) {
+  res.render('verifyOtp', { email, error: 'Failed to verify OTP.', mode });
+}
 });
 
 app.post('/resend-otp', async (req, res) => {
@@ -644,18 +954,18 @@ app.post('/resend-otp', async (req, res) => {
   }
 
   try {
-    const { data: otpEntry, error: otpFetchError } = await supabase
-      .from('OTPs')
-      .select('*')
-      .eq('email', email)
-      .single();
+    const client = await pool.connect();
 
-    if (otpFetchError && otpFetchError.code !== 'PGRST116') {
-      console.error('Error fetching OTP entry:', otpFetchError);
-      return res.status(500).send('Server error.');
-    }
+    // ✅ get server time from PostgreSQL
+    const { rows: timeRows } = await client.query('SELECT NOW() as now');
+    const now = new Date(timeRows[0].now);
 
-    const now = new Date();
+    // ✅ check if OTP already exists
+    const { rows } = await client.query(
+      `SELECT * FROM "OTPs" WHERE email = $1 LIMIT 1`,
+      [email]
+    );
+    const otpEntry = rows[0];
 
     if (otpEntry) {
       const lastResend = otpEntry.last_resend ? new Date(otpEntry.last_resend) : null;
@@ -666,7 +976,8 @@ app.post('/resend-otp', async (req, res) => {
           const cooldownEnd = new Date(lastResend.getTime() + 30 * 60 * 1000);
           if (now < cooldownEnd) {
             const waitMinutes = Math.ceil((cooldownEnd - now) / 60000);
-    
+
+            client.release();
             return res.render('verifyOtp', {
               email,
               error: `Resend limit reached. Please try again in ${waitMinutes} minute${waitMinutes > 1 ? 's' : ''}.`,
@@ -675,37 +986,42 @@ app.post('/resend-otp', async (req, res) => {
               waitMinutes,
             });
           } else {
-
-            await supabase.from('OTPs').update({
-              resend_count: 0,
-              last_resend: null,
-            }).eq('email', email);
+            // Reset resend counter after cooldown
+            await client.query(
+              'UPDATE "OTPs" SET resend_count = $1, last_resend = $2 WHERE email = $3',
+              [0, null, email]
+            );
           }
         }
       }
     }
 
+    // ✅ generate new OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    const { data: nowData, error: nowError } = await supabase.rpc('get_current_timestamp');
-    if (nowError) {
-      console.error('Error getting server time:', nowError);
-      return res.status(500).send('Server error.');
-    }
-    const expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+    const OTP_EXPIRY_MINUTES = 10;
+    const expires_at = new Date(now.getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
     const updatedResendCount = otpEntry ? (otpEntry.resend_count || 0) + 1 : 1;
     const lastResendTimestamp = now.toISOString();
 
-    await supabase.from('OTPs').upsert([{
-      email,
-      otp,
-      expires_at: expires_at.toISOString(),
-      temp_data: { email_address: email },
-      resend_count: updatedResendCount,
-      last_resend: lastResendTimestamp,
-    }], { onConflict: 'email' });
+    // ✅ upsert OTP record
+    await client.query(
+      `INSERT INTO "OTPs" (email, otp, expires_at, temp_data, resend_count, last_resend)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (email) DO UPDATE SET
+         otp = EXCLUDED.otp,
+         expires_at = EXCLUDED.expires_at,
+         temp_data = EXCLUDED.temp_data,
+         resend_count = EXCLUDED.resend_count,
+         last_resend = EXCLUDED.last_resend`,
+      [email, otp, expires_at.toISOString(),
+       JSON.stringify({ email_address: email }), updatedResendCount, lastResendTimestamp]
+    );
 
+    client.release();
+
+    // ✅ send OTP via email
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
@@ -745,29 +1061,45 @@ app.post('/create-password', async (req, res) => {
     return res.render('createPassword', { email, error: 'Passwords do not match.', mode });
   }
   if (!isStrongPassword(password)) {
-    return res.render('createPassword', { email, error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).', mode });
+    return res.render('createPassword', {
+      email,
+      error: 'Password must contain an uppercase letter, a lowercase letter, and a number (min 8 chars).',
+      mode
+    });
   }
 
-  const { data, error } = await supabase.from('OTPs').select('*').eq('email', email).single();
-  if (error || !data || !data.temp_data) {
-    return res.render('createPassword', { email, error: 'No temporary data found.', mode });
-  }
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM "OTPs" WHERE email = $1 LIMIT 1',
+      [email]
+    );
+    const data = rows[0];
+    if (!data || !data.temp_data) {
+      return res.render('createPassword', { email, error: 'No temporary data found.', mode });
+    }
 
-  const hashedPassword = await bcrypt.hash(password, 12);
-  const temp = data.temp_data;
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const temp = data.temp_data;
 
-  const updateResult = await supabase.from('it_supervisor').update({ password: hashedPassword }).eq('Email_Address', temp.email_address);
-  if (updateResult.error) {
-    console.error("Update supervisor error:", updateResult.error);
-    return res.render('createPassword', { email, error: 'Failed to create account.', mode });
-  }
+    const updateResult = await pool.query(
+      'UPDATE it_supervisor SET password = $1 WHERE "Email_Address" = $2',
+      [hashedPassword, temp.email_address]
+    );
+    if (updateResult.rowCount === 0) {
+      console.error("Update supervisor error: No update performed");
+      return res.render('createPassword', { email, error: 'Failed to create account.', mode });
+    }
 
-  await supabase.from('OTPs').delete().eq('email', email);
+    await pool.query('DELETE FROM "OTPs" WHERE email = $1', [email]);
 
-  if (mode === 'reset') {
-    return res.redirect('/?success=password-reset');
-  } else {
-    res.redirect('/?success=account-created');
+    if (mode === 'reset') {
+      return res.redirect('/?success=password-reset');
+    } else {
+      res.redirect('/?success=account-created');
+    }
+  } catch (error) {
+    console.error("Error in create-password:", error);
+    res.render('createPassword', { email, error: 'Server error. Please try again.', mode });
   }
 });
 
@@ -782,45 +1114,57 @@ app.post('/forgot-password', async (req, res) => {
     return res.render('forgotPassword', { error: 'Invalid email format.' });
   }
   if (isDisposableEmail(email_address)) {
-    return res.render('forgotPassword', { error: 'Disposable emails are not allowed.'});
+    return res.render('forgotPassword', { error: 'Disposable emails are not allowed.' });
   }
 
-  const { data: supervisor, error } = await supabase.from('it_supervisor').select('*').eq('Email_Address', email_address).single();
+  try {
+    const { rows } = await pool.query(
+      'SELECT * FROM it_supervisor WHERE "Email_Address" = $1 LIMIT 1',
+      [email_address]
+    );
+    const supervisor = rows[0];
 
-  if (error || !supervisor) {
-    return res.render('forgotPassword', {error: 'Email not found in supervisor records.'});
+    if (!supervisor) {
+      return res.render('forgotPassword', { error: 'Email not found in supervisor records.' });
+    }
+
+    if (!supervisor.password) {
+      return res.render('forgotPassword', { error: 'Account not found or not yet registered' });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    const OTP_EXPIRY_MINUTES = 10;
+    const now = new Date();
+    const expires_at = new Date(now.getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO "OTPs" (email, otp, expires_at, temp_data)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (email) DO UPDATE SET
+         otp = EXCLUDED.otp,
+         expires_at = EXCLUDED.expires_at,
+         temp_data = EXCLUDED.temp_data`,
+      [email_address, otp, expires_at.toISOString(), JSON.stringify({ email_address })]
+    );
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email_address,
+      subject: 'Your OTP Code',
+      text: `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
+    });
+
+    res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}&mode=reset`);
+  } catch (error) {
+    console.error('Error in forgot-password:', error);
+    res.render('forgotPassword', { error: 'Server error. Please try again.' });
   }
-
-  if  (error || !supervisor || !supervisor.password) {
-    return res.render('forgotPassword', { error: 'Account not found or not yet registered' });
-  }
-
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  const { data: nowData, error:nowError } = await supabase.rpc('get_current_timestamp');
-  if (nowError) return handleError(res, 'forgotPassword', 'Could not verify server time.');
-
-  const  expires_at = new Date(new Date(nowData).getTime() + OTP_EXPIRY_MINUTES * 60 * 1000);
-
-  await supabase.from('OTPs').upsert([{
-    email: email_address,
-    otp,
-    expires_at: expires_at.toISOString(),
-    temp_data: { email_address}
-  }]);
-
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS,}
-  });
-
-  await transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to: email_address,
-    subject: 'Your OTP Code',
-    text:  `Your OTP code is ${otp}. It will expire in ${OTP_EXPIRY_MINUTES} minutes.`,
-  });
-
-  res.redirect(`/verify-otp?email=${encodeURIComponent(email_address)}&mode=reset`);
 });
 
 app.listen(port, () => {
