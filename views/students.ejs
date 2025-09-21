@@ -8,8 +8,8 @@
 </head>
 <body class="bg-blue-50 font-sans min-h-screen flex flex-col md:flex-row relative">
 
-  <aside id="sidebar" class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
-    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+  <aside id="sidebar" class="bg-[#1e3a5f] text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
+    <div class="bg-white text-[#1e3a5f] rounded-full p-4 mb-4">
       <span class="text-2xl font-bold">👤</span>
     </div>
     <h2 class="text-xl font-bold"><%= user.Name %></h2>
@@ -38,12 +38,12 @@
 
   <main class="flex-1 p-8 overflow-y-auto ml-0 md:ml-64 transition-all duration-300">
     <div class="flex items-center mb-6">
-      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-blue-900 text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
+      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-[#1e3a5f] text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
         <span class="block w-6 h-0.5 bg-white mb-1"></span>
         <span class="block w-6 h-0.5 bg-white mb-1"></span>
         <span class="block w-6 h-0.5 bg-white"></span>
       </button>
-      <h1 class="text-2xl font-bold text-blue-900">All Students</h1>
+      <h1 class="text-2xl font-bold text-[#1e3a5f]">All Students</h1>
     </div>
 
     <form method="get" class="mb-6 relative w-full md:w-1/2">
@@ -78,7 +78,7 @@
       <div class="bg-white rounded shadow p-4 overflow-x-auto">
         <table class="table-auto w-full text-gray-600" role="grid" aria-label="Students List">
           <thead>
-           <tr class="bg-blue-900 text-white text-left">
+           <tr class="bg-[#1e3a5f] text-white text-left">
               <th scope="col" class="p-3">Mat Number</th>
               <th scope="col" class="p-3">Name</th>
               <th scope="col" class="p-3">School</th>

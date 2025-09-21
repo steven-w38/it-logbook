@@ -13,8 +13,8 @@
 </head>
 <body class="bg-blue-50 font-sans min-h-screen flex relative">
 
-  <aside id="sidebar" class="bg-blue-900 text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
-    <div class="bg-white text-blue-900 rounded-full p-4 mb-4">
+  <aside id="sidebar" class="bg-[#1e3a5f] text-white w-64 p-6 flex flex-col items-center fixed inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-40">
+    <div class="bg-white text-[#1e3a5f] rounded-full p-4 mb-4">
       <span class="text-2xl font-bold">👤</span>
     </div>
     <h2 class="text-xl font-bold"><%= user.Name %></h2>
@@ -42,13 +42,13 @@
 
   <main class="flex-1 p-8 overflow-auto max-w-4xl ml-0 md:ml-64 transition-all duration-300">
     <div class="flex items-center mb-6">
-      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-blue-900 text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
+      <button id="sidebarToggleBtn" class="p-2 mr-3 rounded bg-[#1e3a5f] text-white focus:outline-none md:hidden" aria-label="Toggle Sidebar">
         <span class="block w-6 h-0.5 bg-white mb-1"></span>
         <span class="block w-6 h-0.5 bg-white mb-1"></span>
         <span class="block w-6 h-0.5 bg-white"></span>
       </button>
 
-      <h1 class="text-3xl font-extrabold text-blue-900">Settings</h1>
+      <h1 class="text-3xl font-extrabold text-[#1e3a5f]">Settings</h1>
     </div>
 
     <div class="border-b border-gray-300 mb-6 flex space-x-8 text-gray-600">
@@ -59,37 +59,37 @@
     <section id="content-profile" class="tab-content block">
       <div class="space-y-6">
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Name</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Name</label>
           <input type="text" value="<%= user.Name %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Department</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Department</label>
           <input type="text" value="<%= user.Department %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Designation</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Designation</label>
           <input type="text" value="<%= user.Designation %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Phone Number</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Phone Number</label>
           <input type="tel" value="<%= user.Phone_Number %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Email Address</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Email Address</label>
           <input type="email" value="<%= user.Email_Address %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Name Of Organization</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Name Of Organization</label>
           <input type="text" value="<%= user.Name_Of_Organization %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
 
         <div>
-          <label class="block text-gray-700 font-medium mb-1">Office Address</label>
+          <label class="block text-[#1e3a5f] font-medium mb-1">Office Address</label>
           <input type="text" value="<%= user.Office_Address %>" readonly class="w-full border border-gray-200 rounded px-3 py-2 bg-gray-100 text-gray-500 focus:outline-none focus:ring-2 focus:ring-orange-500" />
         </div>
       </div>
